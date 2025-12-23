@@ -7,7 +7,7 @@ export default function Sidebar() {
 
 	return(
 		<div className={`
-			bg-main-brown ${isOpen ? "w-[20%]" : "w-[5%]"}
+			bg-main-brown ${isOpen ? "w-[20%]" : "w-[6%]"}
 			transition-all duration-300 ease-in-out
 			min-h-screen overflow-hidden py-8 px-6
 		`}>
@@ -21,7 +21,7 @@ export default function Sidebar() {
 
 function SidebarOpenButton({isOpen, setIsOpen}: {isOpen: boolean, setIsOpen: (isOpen: boolean) => void}) {
 	return(
-		<div className="flex justify-end">
+		<div className="flex justify-end pb-4">
 			{
 				isOpen ?
 				<PanelRightOpen className={`${isOpen ? "w-[20%]" : "w-full"} text-main-blue`} onClick={() => setIsOpen(!isOpen)}/>
@@ -35,32 +35,37 @@ function SidebarOpenButton({isOpen, setIsOpen}: {isOpen: boolean, setIsOpen: (is
 function Avatar({isOpen}: {isOpen: boolean}) {
 	return(
 		<div className="w-full border-b-2 border-secondary-brown pb-4">
-			{isOpen && (
+			{/*{isOpen && (*/}
 				<div className="flex items-center justify-center gap-4">
 					<img
 						src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ4YreOWfDX3kK-QLAbAL4ufCPc84ol2MA8Xg&s"
 						alt="mock_avatar"
 						className="w-12 h-12 rounded-full"
 					/>
-					<div className="flex flex-col text-main-blue">
+					<div className={`flex flex-col text-main-blue ${!isOpen && "hidden"}`}>
 						<span>John Doe</span>
 						<span>Admin</span>
 					</div>
 				</div>
-			)}
+			{/*)}*/}
 		</div>
 	);
 }
 
 function SignOut({isOpen} : {isOpen: boolean}) {
 	return(
-		<div className="p-4">
-			{isOpen && (
-				<Link to="/login" className="flex flex-row justify-center gap-4 p-4 text-main-blue bg-secondary-brown rounded-md hover:bg-main-grey transition-colors duration-150">
-					<LogOut/>
-					Sign Out
-				</Link>
-			)}
+		<div className="py-4">
+			<Link to="/login"
+				className=
+				{
+					`flex flex-row ${!isOpen ? "w-fit p-4" : "p-2"} justify-center gap-4
+					text-main-blue text-bold lg:text-2xl text-lg truncate bg-secondary-brown
+					rounded-md hover:bg-main-grey transition-colors duration-150`
+				}
+			>
+				<LogOut className="lg:w-6 lg:h-6 w-4 h-4"/>
+				<span className={`${!isOpen && "hidden"}`}>Sign Out</span>
+			</Link>
 		</div>
 	)
 }
@@ -101,22 +106,21 @@ function SidebarItems({isOpen} : {isOpen: boolean}) {
 	]
 
 	return(
-		isOpen ?
-		<div className="flex flex-col h-[80%] justify-start gap-4 p-4 border-b-2 border-secondary-brown pb-4">
+
+		<div className={`flex flex-col h-[80%] justify-start gap-4 py-4 border-b-2 border-secondary-brown pb-4`}>
 			{items.map((item, index) => (
 				<Link
 					to={item.url}
 					key={index}
-					className="flex flex-col items-center gap-4 text-main-blue bg-secondary-brown p-2 rounded-md hover:bg-main-grey transition-colors duration-150"
+					className={`flex flex-col ${!isOpen ? "w-fit p-4" : "p-2"} gap-4 text-main-blue bg-secondary-brown  rounded-md hover:bg-main-grey transition-colors duration-150`}
 				>
-					<div className="flex items-center gap-4 text-main-blue">
-						<item.icon />
-						<span>{item.title}</span>
+					<div className="flex items-center lg:justify-start justify-center gap-4 text-main-blue text-bold lg:text-2xl text-lg truncate">
+						<item.icon className="lg:w-6 lg:h-6 w-4 h-4" />
+						<span className={`hidden ${isOpen && "lg:inline"}`}>{item.title}</span>
 					</div>
 				</Link>
 			))}
 		</div>
-		:
-		<div></div>
+
 	);
 }
