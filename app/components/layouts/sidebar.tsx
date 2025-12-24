@@ -4,22 +4,26 @@ import { Link } from "react-router";
 
 export default function Sidebar() {
 	const [isOpen, setIsOpen] = useState<boolean>(true);
+	const style = {
+		text: "text-main-blue text-bold lg:text-xl text-lg truncate",
+		icon: "lg:w-5 lg:h-5 w-4 h-4",
+	}
 
 	return(
 		<div className={`
-			bg-main-brown ${isOpen ? "w-[20%]" : "w-[6%]"}
+			bg-main-brown ${isOpen ? "w-[15%]" : "w-[6%]"}
 			transition-all duration-300 ease-in-out
-			min-h-screen overflow-hidden py-8 px-6
+			h-screen overflow-hidden py-8 px-6
 		`}>
-			<SidebarOpenButton isOpen={isOpen} setIsOpen={setIsOpen}/>
+			<SidebarOpenButton isOpen={isOpen} setIsOpen={setIsOpen} style={style}/>
 			<Avatar isOpen={isOpen}/>
-			<SidebarItems isOpen={isOpen}/>
-			<SignOut isOpen={isOpen}/>
+			<SidebarItems isOpen={isOpen} style={style}/>
+			<SignOut isOpen={isOpen} style={style}/>
 		</div>
 	)
 }
 
-function SidebarOpenButton({isOpen, setIsOpen}: {isOpen: boolean, setIsOpen: (isOpen: boolean) => void}) {
+function SidebarOpenButton({isOpen, setIsOpen, style}: {isOpen: boolean, setIsOpen: (isOpen: boolean) => void, style: {text: string, icon: string}}) {
 	return(
 		<div className="flex justify-end pb-4">
 			{
@@ -52,25 +56,25 @@ function Avatar({isOpen}: {isOpen: boolean}) {
 	);
 }
 
-function SignOut({isOpen} : {isOpen: boolean}) {
+function SignOut({isOpen, style} : {isOpen: boolean, style: {text: string, icon: string}}) {
 	return(
 		<div className="py-4">
 			<Link to="/login"
 				className=
 				{
-					`flex flex-row ${!isOpen ? "w-fit p-4" : "p-2"} justify-center gap-4
-					text-main-blue text-bold lg:text-2xl text-lg truncate bg-secondary-brown
+					`flex flex-row ${!isOpen ? "w-fit p-4" : "p-2"} justify-center items-center gap-4
+					${style.text} bg-secondary-brown
 					rounded-md hover:bg-main-grey transition-colors duration-150`
 				}
 			>
-				<LogOut className="lg:w-6 lg:h-6 w-4 h-4"/>
+				<LogOut className={style.icon} />
 				<span className={`${!isOpen && "hidden"}`}>Sign Out</span>
 			</Link>
 		</div>
 	)
 }
 
-function SidebarItems({isOpen} : {isOpen: boolean}) {
+function SidebarItems({isOpen, style} : {isOpen: boolean, style: {text: string, icon: string}}) {
 
 	const items = [
 		{
@@ -114,8 +118,8 @@ function SidebarItems({isOpen} : {isOpen: boolean}) {
 					key={index}
 					className={`flex flex-col ${!isOpen ? "w-fit p-4" : "p-2"} gap-4 text-main-blue bg-secondary-brown  rounded-md hover:bg-main-grey transition-colors duration-150`}
 				>
-					<div className="flex items-center lg:justify-start justify-center gap-4 text-main-blue text-bold lg:text-2xl text-lg truncate">
-						<item.icon className="lg:w-6 lg:h-6 w-4 h-4" />
+					<div className={`flex items-center lg:justify-start justify-center gap-4 ${style.text}`}>
+						<item.icon className={style.icon} />
 						<span className={`hidden ${isOpen && "lg:inline"}`}>{item.title}</span>
 					</div>
 				</Link>
