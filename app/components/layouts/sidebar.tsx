@@ -7,11 +7,14 @@ export default function Sidebar() {
 	const style = {
 		text: "text-main-blue text-bold lg:text-xl text-lg truncate",
 		icon: "lg:w-5 lg:h-5 w-4 h-4",
+		button: "bg-secondary-brown rounded-md hover:bg-main-grey shadow-lg transition-colors duration-150"
 	}
 
 	return(
 		<div className={`
-			bg-main-brown ${isOpen ? "w-[15%]" : "w-[6%]"}
+			bg-linear-to-r from-main-brown to-secondary-brown
+			border-r border-main-brown
+			${isOpen ? "w-[15%]" : "w-[6%]"}
 			transition-all duration-300 ease-in-out
 			h-screen overflow-hidden py-8 px-6
 		`}>
@@ -56,15 +59,14 @@ function Avatar({isOpen}: {isOpen: boolean}) {
 	);
 }
 
-function SignOut({isOpen, style} : {isOpen: boolean, style: {text: string, icon: string}}) {
+function SignOut({isOpen, style} : {isOpen: boolean, style: {text: string, icon: string, button: string}}) {
 	return(
 		<div className="py-4">
 			<Link to="/login"
 				className=
 				{
 					`flex flex-row ${!isOpen ? "w-fit p-4" : "p-2"} justify-center items-center gap-4
-					${style.text} bg-secondary-brown
-					rounded-md hover:bg-main-grey transition-colors duration-150`
+					${style.text} ${style.button}`
 				}
 			>
 				<LogOut className={style.icon} />
@@ -74,7 +76,7 @@ function SignOut({isOpen, style} : {isOpen: boolean, style: {text: string, icon:
 	)
 }
 
-function SidebarItems({isOpen, style} : {isOpen: boolean, style: {text: string, icon: string}}) {
+function SidebarItems({isOpen, style} : {isOpen: boolean, style: {text: string, icon: string, button: string}}) {
 
 	const items = [
 		{
@@ -116,7 +118,7 @@ function SidebarItems({isOpen, style} : {isOpen: boolean, style: {text: string, 
 				<Link
 					to={item.url}
 					key={index}
-					className={`flex flex-col ${!isOpen ? "w-fit p-4" : "p-2"} gap-4 text-main-blue bg-secondary-brown  rounded-md hover:bg-main-grey transition-colors duration-150`}
+					className={`flex flex-col ${!isOpen ? "w-fit p-4" : "p-2"} gap-4 ${style.button}`}
 				>
 					<div className={`flex items-center lg:justify-start justify-center gap-4 ${style.text}`}>
 						<item.icon className={style.icon} />
