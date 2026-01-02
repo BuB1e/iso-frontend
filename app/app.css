@@ -12,6 +12,8 @@
   --color-main-grey: #F9F8F6;
   --color-main-blue: #1A2A80;
   --color-secondary-blue: #7A85C1;
+  --color-alert-red: #A1202F;
+  --color-alert-red-bg: #fca4a4;
 }
 
 html,

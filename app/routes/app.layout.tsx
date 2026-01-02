@@ -9,11 +9,11 @@ export default function Layout() {
 			<Sidebar />
 
 			{/* Main Content */}
-			<div className="w-full">
-				<div className="sticky top-0">
-					<Topbar />
+			<div className="flex flex-col w-full h-screen overflow-hidden">
+				<Topbar />
+				<div className="flex-1 overflow-y-auto">
+					<Outlet />
 				</div>
-				<Outlet />
 			</div>
 		</div>
 	);

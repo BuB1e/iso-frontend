@@ -24,7 +24,8 @@
     "react-dom": "^19.1.1",
     "react-router": "^7.9.2",
     "tailwind-merge": "^3.4.0",
-    "vaul": "^1.1.2"
+    "vaul": "^1.1.2",
+    "zustand": "^5.0.9"
   },
   "devDependencies": {
     "@react-router/dev": "^7.9.2",
