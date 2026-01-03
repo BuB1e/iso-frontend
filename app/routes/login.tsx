@@ -63,7 +63,7 @@ export default function AuthPage() {
 			{/* Main card */}
 			<div className="w-full max-w-md relative">
 				{/* Glass card effect */}
-				<div className="backdrop-blur-xl bg-main-grey/80 rounded-3xl shadow-2xl border border-white/20 overflow-hidden">
+				<div className="backdrop-blur-xl bg-main-gray/80 rounded-3xl shadow-2xl border border-white/20 overflow-hidden">
 					{/* Header */}
 					<div className="bg-gradient-to-r from-main-blue to-secondary-blue p-8 text-center relative overflow-hidden">
 						{/* Decorative shapes in header */}

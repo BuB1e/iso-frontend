@@ -15,7 +15,7 @@ export default function Sidebar() {
 	const style = {
 		text: "text-main-blue font-bold lg:text-lg text-sm truncate",
 		icon: "lg:w-5 lg:h-5 w-4 h-4 font-bold",
-		button: "rounded-md hover:bg-main-grey shadow-lg transition-colors duration-150"
+		button: "rounded-md hover:bg-main-gray shadow-lg transition-colors duration-150"
 	}
 
 	return(
@@ -127,7 +127,7 @@ function SidebarItems({isOpen, style, currentPage, setCurrentPage} : SidebarItem
 				<Link
 					to={item.url}
 					key={index}
-					className={`flex flex-col ${!isOpen ? "w-fit p-4" : "p-2"} gap-4 ${style.button} ${currentPage == item.url ? "bg-main-grey scale-105" : "bg-secondary-brown/70"}`}
+					className={`flex flex-col ${!isOpen ? "w-fit p-4" : "p-2"} gap-4 ${style.button} ${currentPage == item.url ? "bg-main-gray scale-105" : "bg-secondary-brown/70"}`}
 					onClick={() => setCurrentPage(item.url)}
 				>
 					<div className={`flex items-center lg:justify-start justify-center gap-4 ${style.text}`}>

@@ -7,6 +7,7 @@ export default [
 	layout("routes/app.layout.tsx", [
 		route("dashboard", "routes/dashboard.tsx"),
 		route("assessment", "routes/assessment.layout.tsx", [
+			index("routes/assessment.index.tsx"),
 			route("overall", "routes/assessment.overall.tsx"),
 		]),
 		route("evidence", "routes/evidence.tsx"),

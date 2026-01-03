@@ -18,33 +18,34 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "~/components/ui/popover"
+import { useYearStore } from "~/stores/yearStore"
 
 const years = [
   {
-    value: "2022",
+    value: 2022,
     label: "2022",
   },
   {
-    value: "2023",
+    value: 2023,
     label: "2023",
   },
   {
-    value: "2024",
+    value: 2024,
     label: "2024",
   },
   {
-    value: "2025",
+    value: 2025,
     label: "2025",
   },
   {
-    value: "2026",
+    value: 2026,
     label: "2026",
   },
 ]
 
 export function TopbarYearCombobox() {
 
-  const currentYear = new Date().getFullYear().toString();
+  const currentYear = useYearStore((state) => state.currentYear);
   const [open, setOpen] = React.useState(false)
   const [value, setValue] = React.useState(currentYear)
 
@@ -72,9 +73,10 @@ export function TopbarYearCombobox() {
               {years.map((year) => (
                 <CommandItem
                   key={year.value}
-                  value={year.value}
+                  value={year.value.toString()}
                   onSelect={(currentValue) => {
-                    setValue(currentValue === value ? "" : currentValue)
+                    const selectedYear = parseInt(currentValue, 10)
+                    setValue(selectedYear === value ? 0 : selectedYear)
                     setOpen(false)
                   }}
                 >

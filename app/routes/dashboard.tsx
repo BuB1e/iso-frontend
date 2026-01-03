@@ -1,5 +1,5 @@
 import { LayoutDashboard, TriangleAlert, ChevronRight } from "lucide-react";
-import DashboardCard from "~/components/ui/card";
+import { DashboardCard } from "~/components/ui/card";
 import { ControlItem } from "~/components/ui/controlItem";
 import { EControlItemType } from "~/types";
 
@@ -30,7 +30,7 @@ function HighRiskControlList() {
 	return(
 		<div className="
 			flex flex-col justify-start items-start h-fit w-full py-8 px-4
-			rounded-lg border-2 bg-main-grey border-alert-red-bg shadow-xl"
+			rounded-lg border-2 bg-main-gray border-alert-red-bg shadow-xl"
 		>
 			{/* Topic */}
 			<div className="flex flex-row items-center justify-between gap-4">
