@@ -8,7 +8,7 @@ export default [
 		route("dashboard", "routes/dashboard.tsx"),
 		route("assessment", "routes/assessment.layout.tsx", [
 			index("routes/assessment.index.tsx"),
-			route("overall", "routes/assessment.overall.tsx"),
+			route("overview", "routes/assessment.overview.tsx"),
 		]),
 		route("evidence", "routes/evidence.tsx"),
 		route("report", "routes/report.tsx"),

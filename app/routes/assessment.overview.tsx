@@ -1,7 +1,7 @@
 import { Domains } from "~/types";
-import { DomainCard } from "~/components/ui/card";
+import { DomainCard } from "~/components/ui/domainCard";
 
-export default function AssessmentOverall() {
+export default function AssessmentOverview() {
 	return(
 		<div className="flex flex-col w-full h-full justify-center items-center gap-4">
 			{Object.values(Domains).map((domain) => (

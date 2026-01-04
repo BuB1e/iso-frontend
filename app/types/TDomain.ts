@@ -1,14 +1,17 @@
 import { Shield, Users, Lock, Server, type LucideProps } from "lucide-react";
 import type { ForwardRefExoticComponent, RefAttributes } from "react";
 
+export type ColorKey = "main-blue" | "green" | "yellow" | "purple";
+
 export interface TDomain {
 	number: number;
 	name: string;
 	description: string;
 	icon: ForwardRefExoticComponent<Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>>;
-	color: string;
+	color: ColorKey;
 }
 
+// Color need to map in colorStyles in Card.tsx
 export const Domains: Record<string, TDomain> = {
 	A5: {
 		number: 5,
@@ -22,20 +25,20 @@ export const Domains: Record<string, TDomain> = {
 		name: "People Controls",
 		description: "HR security, awareness and training",
 		icon: Users,
-		color: "main-blue",
+		color: "green",
 	},
 	A7: {
 		number: 7,
 		name: "Physical Controls",
 		description: "Access control, physical security and asset protection",
 		icon: Lock,
-		color: "main-blue",
+		color: "yellow",
 	},
 	A8: {
 		number: 8,
 		name: "Technical Controls",
 		description: "Access control, cryptography, data protection, operations and network security",
 		icon: Server,
-		color: "main-blue",
+		color: "purple",
 	},
 };
