@@ -152,14 +152,7 @@ export default function Report() {
         />
       </div>
 
-      {/* Recent Reports Section */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-        <div className="px-6 py-4 border-b border-slate-100">
-          <h2 className="text-lg font-semibold text-slate-800">
-            Recent Reports
-          </h2>
-        </div>
-
         <Table>
           <TableHeader>
             <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
