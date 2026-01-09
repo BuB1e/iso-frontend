@@ -96,6 +96,7 @@ const evidenceData = [
 
 const ITEMS_PER_PAGE = 5;
 
+// TODO: Background and text color is not same theme color
 // File icon component
 function FileIcon({ type }: { type: string }) {
   if (type === "Excel") {

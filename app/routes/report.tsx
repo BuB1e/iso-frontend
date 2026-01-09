@@ -15,6 +15,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 
+// TODO: Background and text color is not same theme color
 // Sample report data - expanded for pagination demo
 const reportData = [
   {
