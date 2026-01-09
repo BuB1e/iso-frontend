@@ -9,7 +9,8 @@ import type { Route } from "./+types/home";
 //}
 
 export function loader() {
-  return redirect("/login");
+  //return redirect("/login");
+  return redirect("/dashboard");
 }
 
 export default function Home() {

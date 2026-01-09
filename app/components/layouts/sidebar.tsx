@@ -113,11 +113,11 @@ function SidebarItems({isOpen, style, currentPage, setCurrentPage} : SidebarItem
 			url: ESidebarPage.Audit,
 			icon: FileText,
 		},
-		{
-			title: "Settings",
-			url: ESidebarPage.Settings,
-			icon: Settings,
-		},
+		//{
+		//	title: "Settings",
+		//	url: ESidebarPage.Settings,
+		//	icon: Settings,
+		//},
 	]
 
 	return(

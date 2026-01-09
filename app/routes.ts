@@ -9,6 +9,7 @@ export default [
 		route("assessment", "routes/assessment.layout.tsx", [
 			index("routes/assessment.index.tsx"),
 			route("overview", "routes/assessment.overview.tsx"),
+			route("domain/:domainNumber", "routes/domain.detail.tsx"),
 		]),
 		route("evidence", "routes/evidence.tsx"),
 		route("report", "routes/report.tsx"),

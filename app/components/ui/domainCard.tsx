@@ -1,6 +1,7 @@
 import { ChevronRight, type LucideProps } from "lucide-react";
 import type { ForwardRefExoticComponent, RefAttributes } from "react";
 import type { TDomain, ColorKey } from "~/types/TDomain";
+import { Link } from "react-router";
 
 interface DomainCardProps {
   domain: TDomain;
@@ -47,15 +48,16 @@ export function DomainCard({ domain }: DomainCardProps) {
   const colors = colorStyles[domain.color];
 
   return (
-    <div
+    <Link
+      to={`/assessment/domain/A${domain.number}`}
       className={`group
 			flex flex-col bg-linear-to-br from-white ${colors.gradient} rounded-xl shadow-xl w-full min-h-fit lg:h-[240px] h-[200px]
-			border-l-10 ${colors.border} hover:scale-101 transition-all duration-75 hover:shadow-2xl gap-4`}
+			border-l-10 ${colors.border} hover:scale-101 transition-all duration-75 hover:shadow-2xl gap-4 hover:cursor-pointer`}
     >
       <Header domain={domain} bgColor={colors.bg} textColor={colors.text} />
       <ProgressStatusRow />
       <ProgressBar current={1} total={37} />
-    </div>
+    </Link>
   );
 }
 
@@ -135,28 +137,23 @@ function ProgressStatusCard({
   total: number;
 }) {
   let textColor = "";
-  let borderColor = "";
   let goal = 0;
   let isTotal = false;
   switch (progressStatus) {
     case ProgressStatus.Todo:
       textColor = "text-main-blue";
-      borderColor = "border-main-blue";
       goal = 0;
       break;
     case ProgressStatus.Inprogress:
       textColor = "text-alert-yellow";
-      borderColor = "border-alert-yellow";
       goal = 0;
       break;
     case ProgressStatus.Done:
       textColor = "text-green-600";
-      borderColor = "border-green-400";
       goal = total;
       break;
     case ProgressStatus.Total:
       textColor = "text-gray-600";
-      borderColor = "border-gray-400";
       goal = total;
       isTotal = true;
       break;
