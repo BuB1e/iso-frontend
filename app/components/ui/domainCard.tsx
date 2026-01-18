@@ -51,7 +51,7 @@ export function DomainCard({ domain }: DomainCardProps) {
     <Link
       to={`/assessment/domain/A${domain.number}`}
       className={`group
-			flex flex-col bg-linear-to-br from-white ${colors.gradient} rounded-xl shadow-xl w-full min-h-fit lg:h-[240px] h-[200px]
+			flex flex-col bg-linear-to-br from-light-brown ${colors.gradient} rounded-xl shadow-xl w-full min-h-fit lg:h-[240px] h-[200px]
 			border-l-10 ${colors.border} hover:scale-101 transition-all duration-75 hover:shadow-2xl gap-4 hover:cursor-pointer`}
     >
       <Header domain={domain} bgColor={colors.bg} textColor={colors.text} />

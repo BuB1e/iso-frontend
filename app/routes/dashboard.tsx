@@ -6,10 +6,15 @@ import { EControlItemType } from "~/types";
 export default function Dashboard() {
 	return(
 		<div className="
-			flex flex-col min-h-screen py-10 lg:px-30
-			justify-start items-start bg-light-brown scroll-auto"
+			flex flex-col min-h-screen py-8 px-8 lg:px-16
+			justify-start items-start bg-slate-50/50 scroll-auto gap-4"
 		>
-			<h1 className="text-4xl font-bold text-main-blue">Dashboard</h1>
+			<div>
+				<h1 className="text-2xl font-bold text-slate-800">Dashboard</h1>
+				<p className="text-slate-500 text-sm mt-1">
+					Overview of your ISO 27001 compliance status and key metrics.
+				</p>
+			</div>
 			<CardGrid />
 			<HighRiskControlList />
 		</div>

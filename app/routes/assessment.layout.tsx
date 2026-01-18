@@ -6,10 +6,15 @@ export default function Assessment() {
 
 	return(
 		<div className="
-			flex flex-col min-h-screen py-10 lg:px-30
-			justify-start items-start bg-light-brown scroll-auto gap-4"
+			flex flex-col min-h-screen py-8 px-8 lg:px-16
+			justify-start items-start bg-slate-50/50 scroll-auto gap-4"
 		>
-			<h1 className="text-4xl text-main-blue font-bold">ISO27001 Assessment Compliance on year : {currentYear}</h1>
+			<div>
+				<h1 className="text-2xl text-slate-800 font-bold">ISO27001 Assessment Compliance on year : {currentYear}</h1>
+				<p className="text-slate-500 text-sm mt-1">
+					Track and evaluate your organization's compliance with ISO 27001 security controls.
+				</p>
+			</div>
 			<Outlet />
 		</div>
 	);
