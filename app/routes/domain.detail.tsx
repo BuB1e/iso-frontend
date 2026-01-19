@@ -3,9 +3,6 @@ import { useParams } from "react-router";
 import { EControlItemType } from "~/types";
 import { ControlItem } from "~/components/ui/controlItem";
 
-
-//export function ControlItem({ type, control, assessmentStatus, description }: ControlItemProps) {
-
 const mock = [
 	{
 		type: EControlItemType.AssessmentItem,

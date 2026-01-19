@@ -95,7 +95,7 @@ function AssessmentControlItem({ domain, control, assessmentStatus, description 
 			rounded-lg border shadow-sm
 			hover:scale-102 transition-all duration-75
 			bg-linear-to-br from-white ${colors.gradient}
-			border-2 ${colors.border}
+			border ${colors.border}
 		`}
 		>
 			{/* Topic */}
@@ -106,7 +106,7 @@ function AssessmentControlItem({ domain, control, assessmentStatus, description 
 				</div>
 				<div>
 					<h2 className="text-lg font-bold">{description}</h2>
-					<p className="text-sm truncate">{assessmentStatus || "Unknown Status"}</p>
+					<p className="text-sm truncate p-2">{assessmentStatus || "Unknown Status"}</p>
 				</div>
 			</div>
 

@@ -10,6 +10,7 @@ export default [
 			index("routes/assessment.index.tsx"),
 			route("overview", "routes/assessment.overview.tsx"),
 			route("domain/:domainNumber", "routes/domain.detail.tsx"),
+			route("domain/:domainNumber/:controlNumber", "routes/domain.control.tsx"),
 		]),
 		route("evidence", "routes/evidence.tsx"),
 		route("report", "routes/report.tsx"),
