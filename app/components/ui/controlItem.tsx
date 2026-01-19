@@ -1,117 +1,219 @@
 import { ChevronRight } from "lucide-react";
-import { EControlItemType, type ColorKey, type TDomain } from "~/types";
+import { Link, useParams } from "react-router";
+import {
+  type TControl,
+  type TAssessmentControl,
+  ControlStatus,
+  ControlsType,
+  controlStatusConfig,
+  controlsTypeColorMap,
+  controlsTypeDomainMap,
+  type DomainColorKey,
+} from "~/types";
 
+// Props for the main ControlItem component
 interface ControlItemProps {
-	type: EControlItemType;
-	domain?: TDomain;
-	control: string;
-	description: string;
-	assessmentStatus?: string;
+  control: TControl;
+  assessmentControl: TAssessmentControl;
+  isHighRisk?: boolean;
 }
 
+// Props for the high-risk variant
 interface HighRiskControlItemProps {
-	control: string;
-	assessmentStatus: string | undefined;
-	description: string;
+  control: TControl;
 }
 
+// Props for the assessment control variant
 interface AssessmentControlItemProps {
-	domain: TDomain | undefined,
-	control: string;
-	assessmentStatus: string | undefined;
-	description: string;
+  control: TControl;
+  domainType: ControlsType;
 }
 
+// Color styles for each domain type
 const colorStyles: Record<
-  ColorKey,
+  DomainColorKey,
   { bg: string; text: string; gradient: string; border: string }
 > = {
-  "main-blue": {
-	bg: "bg-main-blue/20",
-	text: "text-main-blue",
-	gradient: "to-main-blue/30",
-	border: "border-main-blue",
+  blue: {
+    bg: "bg-main-blue/20",
+    text: "text-main-blue",
+    gradient: "to-main-blue/30",
+    border: "border-main-blue",
   },
   green: {
-	bg: "bg-green-400/20",
-	text: "text-green-800",
-	gradient: "to-green-400/30",
-	border: "border-green-600",
+    bg: "bg-green-400/20",
+    text: "text-green-800",
+    gradient: "to-green-400/30",
+    border: "border-green-600",
   },
   yellow: {
-	bg: "bg-yellow-400/20",
-	text: "text-yellow-800",
-	gradient: "to-yellow-400/30",
-	border: "border-yellow-600",
+    bg: "bg-yellow-400/20",
+    text: "text-yellow-800",
+    gradient: "to-yellow-400/30",
+    border: "border-yellow-600",
   },
   purple: {
-	bg: "bg-purple-400/20",
-	text: "text-purple-800",
-	gradient: "to-purple-400/30",
-	border: "border-purple-600",
+    bg: "bg-purple-400/20",
+    text: "text-purple-800",
+    gradient: "to-purple-400/30",
+    border: "border-purple-600",
   },
 };
 
-export function ControlItem({ type, domain, control, assessmentStatus, description }: ControlItemProps) {
-	if (type == EControlItemType.HighRisk) {
-		return <HighRiskControlItem control={control} assessmentStatus={assessmentStatus} description={description} />;
-	} else if (type == EControlItemType.AssessmentItem) {
-		return <AssessmentControlItem domain={domain} control={control} assessmentStatus={assessmentStatus} description={description} />;
-	}
+/**
+ * Main ControlItem component that renders either HighRisk or Assessment variant
+ */
+export function ControlItem({
+  control,
+  assessmentControl,
+  isHighRisk = false,
+}: ControlItemProps) {
+  if (isHighRisk) {
+    return <HighRiskControlItem control={control} />;
+  }
+  return (
+    <AssessmentControlItem
+      control={control}
+      domainType={assessmentControl.type}
+    />
+  );
 }
 
-function HighRiskControlItem({ control, assessmentStatus, description }: HighRiskControlItemProps) {
-	return(
-		<div className="
-			flex flex-row justify-between items-center h-fit w-full py-2 px-4
-			rounded-lg border bg-white border-alert-red-bg shadow-sm
-			hover:scale-102 transition-all duration-75 "
-		>
-			{/* Topic */}
-			{/* TODO: implement real data on high risk control items */}
-			<div className="flex flex-row items-center gap-4">
-				<div className="flex items-center justify-center p-2 w-fit rounded-lg bg-alert-red-bg">
-					<h2 className="text-sm font-bold text-alert-red">{control}</h2>
-				</div>
-				<div>
-					<h2 className="text-lg font-bold">{description}</h2>
-					<p className="text-sm truncate">{assessmentStatus || "Unknown Status"}</p>
-				</div>
-			</div>
-
-			{/* Actions */}
-			<ChevronRight className="w-6 h-6 text-alert-red" />
-		</div>
-	);
+/**
+ * Status badge component showing the control's implementation status
+ */
+function StatusBadge({ status }: { status: ControlStatus }) {
+  const config = controlStatusConfig[status];
+  return (
+    <span
+      className={`px-2 py-1 rounded-md text-xs font-medium ${config.bgColor} ${config.color}`}
+    >
+      {config.label}
+    </span>
+  );
 }
 
+/**
+ * High-risk control item - displayed on dashboard for controls needing attention
+ */
+function HighRiskControlItem({ control }: HighRiskControlItemProps) {
+  return (
+    <Link
+      to={`/assessment/domain/A${control.code.split(".")[1]?.split(".")[0] || "5"}/${control.code}`}
+      className="
+        flex flex-row justify-between items-center h-fit w-full py-3 px-4
+        rounded-lg border bg-white border-alert-red-bg shadow-sm
+        hover:scale-[1.02] transition-all duration-75 hover:shadow-md cursor-pointer"
+    >
+      {/* Control Info */}
+      <div className="flex flex-row items-center gap-4">
+        <div className="flex items-center justify-center p-2 w-fit rounded-lg bg-alert-red-bg">
+          <span className="text-sm font-bold text-alert-red">
+            {control.code}
+          </span>
+        </div>
+        <div className="flex flex-col">
+          <h2 className="text-lg font-bold text-slate-800">{control.name}</h2>
+          <p className="text-sm text-slate-500 truncate max-w-md">
+            {control.description}
+          </p>
+        </div>
+      </div>
 
-function AssessmentControlItem({ domain, control, assessmentStatus, description }: AssessmentControlItemProps) {
-	const colors = colorStyles[domain?.color || "main-blue"];
+      {/* Status & Action */}
+      <div className="flex items-center gap-4">
+        <StatusBadge status={control.status} />
+        <ChevronRight className="w-6 h-6 text-alert-red" />
+      </div>
+    </Link>
+  );
+}
 
-	return(
-		<div className={`
-			flex flex-row justify-between items-center h-fit w-full py-2 px-4
-			rounded-lg border shadow-sm
-			hover:scale-102 transition-all duration-75
-			bg-linear-to-br from-white ${colors.gradient}
-			border ${colors.border}
-		`}
-		>
-			{/* Topic */}
-			{/* TODO: implement real data on high risk control items */}
-			<div className="flex flex-row items-center gap-4">
-				<div className={`flex items-center justify-center p-2 w-fit rounded-lg ${colors.bg}`}>
-					<h2 className={`text-sm font-bold ${colors.text}`}>{control}</h2>
-				</div>
-				<div>
-					<h2 className="text-lg font-bold">{description}</h2>
-					<p className="text-sm truncate p-2">{assessmentStatus || "Unknown Status"}</p>
-				</div>
-			</div>
+/**
+ * Assessment control item - displayed in domain detail view
+ */
+function AssessmentControlItem({
+  control,
+  domainType,
+}: AssessmentControlItemProps) {
+  const { domainNumber } = useParams();
+  const colorKey = controlsTypeColorMap[domainType];
+  const colors = colorStyles[colorKey];
 
-			{/* Actions */}
-			<ChevronRight className={`w-6 h-6 ${colors.text}`} />
-		</div>
-	);
+  return (
+    <Link
+      to={`/assessment/domain/${domainNumber}/${control.code}`}
+      className={`
+        flex flex-row justify-between items-center h-fit w-full py-3 px-4
+        rounded-lg border shadow-sm
+        hover:scale-[1.02] transition-all duration-75 hover:shadow-md cursor-pointer
+        bg-gradient-to-br from-white ${colors.gradient}
+        ${colors.border}`}
+    >
+      {/* Control Info */}
+      <div className="flex flex-row items-center gap-4">
+        <div
+          className={`flex items-center justify-center p-2 w-fit rounded-lg ${colors.bg}`}
+        >
+          <span className={`text-sm font-bold ${colors.text}`}>
+            {control.code}
+          </span>
+        </div>
+        <div className="flex flex-col">
+          <h2 className="text-lg font-bold text-slate-800">{control.name}</h2>
+          <p className="text-sm text-slate-500 truncate max-w-md">
+            {control.description}
+          </p>
+        </div>
+      </div>
+
+      {/* Status & Action */}
+      <div className="flex items-center gap-4">
+        <StatusBadge status={control.status} />
+        <ChevronRight className={`w-6 h-6 ${colors.text}`} />
+      </div>
+    </Link>
+  );
+}
+
+/**
+ * Utility function to create a mock control for testing
+ * TODO: Remove this when connected to API
+ */
+export function createMockControl(
+  code: string,
+  name: string,
+  description: string,
+  status: ControlStatus = ControlStatus.NOT_IMPLEMENTED,
+  assessmentControlId: number = 1,
+): TControl {
+  return {
+    id: Math.random() * 1000,
+    code,
+    name,
+    currentPractice: "",
+    description,
+    status,
+    assessmentControlId,
+  };
+}
+
+/**
+ * Utility function to create a mock assessment control for testing
+ * TODO: Remove this when connected to API
+ */
+export function createMockAssessmentControl(
+  type: ControlsType,
+  count: number = 0,
+  maxCount: number = 10,
+): TAssessmentControl {
+  return {
+    id: Math.random() * 1000,
+    count,
+    maxCount,
+    context: "",
+    type,
+    isoAssessmentId: 1,
+    controls: [],
+  };
 }
