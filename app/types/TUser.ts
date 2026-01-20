@@ -32,7 +32,7 @@ export const userRoleConfig: Record<
   },
   [UserRole.EXTERNAL_EXPERT]: {
     label: "EXTERNAL EXPERT",
-    description: "Can review and approve controls",
+    description: "Can view assessments and controls",
     color: "text-green-700",
     bgColor: "bg-green-100",
   },
@@ -49,9 +49,10 @@ export function canEditImplementation(role: UserRole): boolean {
   return role === UserRole.INTERNAL_EXPERT || role === UserRole.ADMIN;
 }
 
-// Check if user can submit reviews
+// Check if user can submit reviews - DISABLED: No Review model in schema
 export function canSubmitReview(role: UserRole): boolean {
-  return role === UserRole.EXTERNAL_EXPERT || role === UserRole.ADMIN;
+  // Review functionality not available yet - no Review table in schema
+  return false;
 }
 
 // Mock current user - TODO: Replace with auth context

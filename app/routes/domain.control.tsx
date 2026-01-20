@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link, useParams } from "react-router";
 import {
   ArrowLeft,
@@ -18,17 +18,20 @@ import {
 } from "lucide-react";
 import {
   ControlStatus,
-  ControlsType,
   controlStatusConfig,
-  controlsTypeDomainMap,
-  controlsTypeNameMap,
   type TControl,
   UserRole,
   userRoleConfig,
-  canEditImplementation,
-  canSubmitReview,
-  getMockCurrentUser,
 } from "~/types";
+import {
+  useUserStore,
+  useCanEditImplementation,
+  useCanSubmitReview,
+} from "~/stores/userStore";
+import {
+  useFormCacheStore,
+  type ControlFormData,
+} from "~/stores/formCacheStore";
 
 // Review status enum
 enum ReviewStatus {
@@ -62,101 +65,203 @@ interface AIAnalysis {
   recommendedActions: string[];
 }
 
-// Mock control data
-function getMockControlData() {
-  return {
-    control: {
+// Mock control data - memoized outside component for performance
+const MOCK_DATA = {
+  control: {
+    id: 1,
+    code: "A.5.1",
+    name: "Policies for information security",
+    description:
+      "Information security policy and topic-specific policies shall be defined, approved by management, published, communicated to and acknowledged by relevant personnel.",
+    currentPractice:
+      "We have a central policy portal hosted on SharePoint. All employees are required to sign off on the information security policy during onboarding. Annual re-acknowledgment is required.",
+    status: ControlStatus.IMPLEMENTED,
+    assessmentControlId: 1,
+  } as TControl,
+  guidance:
+    "Ensure that you have documented policies and procedures. For this control, auditors typically look for evidence of approval, communication to relevant staff, and periodic review.",
+  evidenceDescription:
+    "Link to SharePoint policy library. All sign-off records available in HR system.",
+  context:
+    "Small startup environment (~50 employees), but policies are formalized and regularly reviewed. Last policy review was conducted in Q3 2025.",
+  auditTrail: {
+    lastUpdated: "11/25/2025",
+    updatedBy: "Alex Security",
+    version: "1.2",
+  },
+  reviewStatus: ReviewStatus.APPROVED,
+  reviewerComments:
+    "Excellent implementation of information security policies. The organization has demonstrated strong policy governance with proper documentation and employee acknowledgment processes. Recommend continuing annual reviews and considering automation for sign-off tracking.",
+  evidences: [
+    {
       id: 1,
-      code: "A.5.1",
-      name: "Policies for information security",
-      description:
-        "Information security policy and topic-specific policies shall be defined, approved by management, published, communicated to and acknowledged by relevant personnel.",
-      currentPractice:
-        "We have a central policy portal hosted on SharePoint. All employees are required to sign off on the information security policy during onboarding. Annual re-acknowledgment is required.",
-      status: ControlStatus.IMPLEMENTED,
-      assessmentControlId: 1,
-    } as TControl,
-    guidance:
-      "Ensure that you have documented policies and procedures. For this control, auditors typically look for evidence of approval, communication to relevant staff, and periodic review.",
-    evidenceDescription:
-      "Link to SharePoint policy library. All sign-off records available in HR system.",
-    context:
-      "Small startup environment (~50 employees), but policies are formalized and regularly reviewed. Last policy review was conducted in Q3 2025.",
-    auditTrail: {
-      lastUpdated: "11/25/2025",
-      updatedBy: "Alex Security",
-      version: "1.2",
+      fileName: "InfoSec_Policy_v2.pdf",
+      fileSize: "2.4 MB",
+      uploadedAt: "11/20/2025",
+      fileType: "pdf",
     },
-    reviewStatus: ReviewStatus.APPROVED,
-    reviewerComments:
-      "Excellent implementation of information security policies. The organization has demonstrated strong policy governance with proper documentation and employee acknowledgment processes. Recommend continuing annual reviews and considering automation for sign-off tracking.",
-    evidences: [
-      {
-        id: 1,
-        fileName: "InfoSec_Policy_v2.pdf",
-        fileSize: "2.4 MB",
-        uploadedAt: "11/20/2025",
-        fileType: "pdf",
-      },
-      {
-        id: 2,
-        fileName: "Employee_Signoff_Records.xlsx",
-        fileSize: "1.1 MB",
-        uploadedAt: "11/22/2025",
-        fileType: "excel",
-      },
-    ] as Evidence[],
-    aiAnalysis: {
-      maturityScore: 4,
-      maxScore: 5,
-      gaps: [
-        "Strong foundation with centralized policy management",
-        "The organization demonstrates good policy governance with regular reviews and employee acknowledgment tracking",
-        "Minor gap identified in automated sign-off tracking.",
-      ],
-      recommendedActions: [
-        "Schedule annual policy review for Q4 2025",
-        "Implement automated sign-off tracking system",
-        "Add version control to policy documents",
-        "Consider topic-specific policies for remote work",
-      ],
-    } as AIAnalysis,
-  };
-}
+    {
+      id: 2,
+      fileName: "Employee_Signoff_Records.xlsx",
+      fileSize: "1.1 MB",
+      uploadedAt: "11/22/2025",
+      fileType: "excel",
+    },
+  ] as Evidence[],
+  aiAnalysis: {
+    maturityScore: 4,
+    maxScore: 5,
+    gaps: [
+      "Strong foundation with centralized policy management",
+      "The organization demonstrates good policy governance with regular reviews and employee acknowledgment tracking",
+      "Minor gap identified in automated sign-off tracking.",
+    ],
+    recommendedActions: [
+      "Schedule annual policy review for Q4 2025",
+      "Implement automated sign-off tracking system",
+      "Add version control to policy documents",
+      "Consider topic-specific policies for remote work",
+    ],
+  } as AIAnalysis,
+};
 
 export default function DomainControl() {
   const { domainNumber, controlNumber } = useParams();
   const [activeTab, setActiveTab] = useState<Tab>(Tab.Implementation);
-  const currentUser = getMockCurrentUser();
 
-  // Mock data - TODO: Fetch from API
-  const mockData = getMockControlData();
-  const [control, setControl] = useState(mockData.control);
+  // User & permissions from Zustand store
+  const currentUser = useUserStore((state) => state.currentUser);
+  const canEdit = useCanEditImplementation();
+  const canReview = useCanSubmitReview();
+
+  // Form cache store
+  const { getFormData, saveFormData, clearFormData, hasUnsavedChanges } =
+    useFormCacheStore();
+
+  // Get control code from URL or default
+  const controlCode = controlNumber || MOCK_DATA.control.code;
+
+  // Initialize form state - check cache first
+  const cachedData = useMemo(
+    () => getFormData(controlCode),
+    [controlCode, getFormData],
+  );
+
+  const [status, setStatus] = useState<ControlStatus>(
+    cachedData?.status || MOCK_DATA.control.status,
+  );
   const [currentPractice, setCurrentPractice] = useState(
-    mockData.control.currentPractice,
+    cachedData?.currentPractice || MOCK_DATA.control.currentPractice,
   );
   const [evidenceDescription, setEvidenceDescription] = useState(
-    mockData.evidenceDescription,
+    cachedData?.evidenceDescription || MOCK_DATA.evidenceDescription,
   );
-  const [context, setContext] = useState(mockData.context);
-  const [status, setStatus] = useState(control.status);
-  const [reviewStatus, setReviewStatus] = useState(mockData.reviewStatus);
+  const [context, setContext] = useState(
+    cachedData?.context || MOCK_DATA.context,
+  );
+  const [reviewStatus, setReviewStatus] = useState(MOCK_DATA.reviewStatus);
   const [reviewerComments, setReviewerComments] = useState(
-    mockData.reviewerComments,
+    cachedData?.reviewerComments || MOCK_DATA.reviewerComments,
   );
-  const [evidences, setEvidences] = useState(mockData.evidences);
+  const [evidences, setEvidences] = useState(MOCK_DATA.evidences);
 
-  const canEdit = canEditImplementation(currentUser.role);
-  const canReview = canSubmitReview(currentUser.role);
+  // Track if form has been modified from original
+  const [isDirty, setIsDirty] = useState(hasUnsavedChanges(controlCode));
+
+  // Auto-save to cache when form changes (debounced)
+  useEffect(() => {
+    if (!canEdit && !canReview) return;
+
+    const timeoutId = setTimeout(() => {
+      const formData: ControlFormData = {
+        controlCode,
+        status,
+        currentPractice,
+        evidenceDescription,
+        context,
+        reviewerComments,
+        lastModified: Date.now(),
+      };
+
+      // Check if anything changed from original
+      const hasChanges =
+        status !== MOCK_DATA.control.status ||
+        currentPractice !== MOCK_DATA.control.currentPractice ||
+        evidenceDescription !== MOCK_DATA.evidenceDescription ||
+        context !== MOCK_DATA.context ||
+        reviewerComments !== MOCK_DATA.reviewerComments;
+
+      if (hasChanges) {
+        saveFormData(formData);
+        setIsDirty(true);
+      }
+    }, 500); // Debounce 500ms
+
+    return () => clearTimeout(timeoutId);
+  }, [
+    status,
+    currentPractice,
+    evidenceDescription,
+    context,
+    reviewerComments,
+    controlCode,
+    canEdit,
+    canReview,
+    saveFormData,
+  ]);
+
+  // Handle save
+  const handleSave = useCallback(() => {
+    // TODO: API call to save
+    console.log("Saving form data...", {
+      controlCode,
+      status,
+      currentPractice,
+      evidenceDescription,
+      context,
+      reviewerComments,
+    });
+
+    // Clear cache after successful save
+    clearFormData(controlCode);
+    setIsDirty(false);
+    alert("Changes saved successfully!");
+  }, [
+    controlCode,
+    status,
+    currentPractice,
+    evidenceDescription,
+    context,
+    reviewerComments,
+    clearFormData,
+  ]);
+
+  // Handle cancel - restore original data
+  const handleCancel = useCallback(() => {
+    setStatus(MOCK_DATA.control.status);
+    setCurrentPractice(MOCK_DATA.control.currentPractice);
+    setEvidenceDescription(MOCK_DATA.evidenceDescription);
+    setContext(MOCK_DATA.context);
+    setReviewerComments(MOCK_DATA.reviewerComments);
+    clearFormData(controlCode);
+    setIsDirty(false);
+  }, [controlCode, clearFormData]);
+
+  if (!currentUser) {
+    return <div>Loading...</div>;
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-50/50">
       {/* Header */}
       <Header
-        control={control}
+        control={MOCK_DATA.control}
         status={status}
         reviewStatus={reviewStatus}
         domainNumber={domainNumber || "A5"}
+        isDirty={isDirty}
+        onSave={handleSave}
+        onCancel={handleCancel}
       />
 
       {/* Main Content */}
@@ -165,8 +270,8 @@ export default function DomainControl() {
         <div className="flex flex-col gap-6 w-3/4">
           {/* Control Guidance */}
           <ControlGuidanceSection
-            description={control.description}
-            guidance={mockData.guidance}
+            description={MOCK_DATA.control.description}
+            guidance={MOCK_DATA.guidance}
           />
 
           {/* Tabs */}
@@ -185,13 +290,14 @@ export default function DomainControl() {
                 context={context}
                 setContext={setContext}
                 canEdit={canEdit}
+                onSave={handleSave}
               />
             )}
             {activeTab === Tab.Evidence && (
               <EvidenceSection evidences={evidences} canEdit={canEdit} />
             )}
             {activeTab === Tab.AIAnalysis && (
-              <AIAnalysisSection analysis={mockData.aiAnalysis} />
+              <AIAnalysisSection analysis={MOCK_DATA.aiAnalysis} />
             )}
             {activeTab === Tab.Review && (
               <ReviewSection
@@ -207,7 +313,7 @@ export default function DomainControl() {
 
         {/* Right Sidebar (1/4) */}
         <div className="flex flex-col gap-4 w-1/4">
-          <AuditTrailSection auditTrail={mockData.auditTrail} />
+          <AuditTrailSection auditTrail={MOCK_DATA.auditTrail} />
           <YourRoleSection role={currentUser.role} />
         </div>
       </div>
@@ -221,11 +327,17 @@ function Header({
   status,
   reviewStatus,
   domainNumber,
+  isDirty,
+  onSave,
+  onCancel,
 }: {
   control: TControl;
   status: ControlStatus;
   reviewStatus: ReviewStatus;
   domainNumber: string;
+  isDirty: boolean;
+  onSave: () => void;
+  onCancel: () => void;
 }) {
   const statusConfig = controlStatusConfig[status];
 
@@ -253,16 +365,28 @@ function Header({
                 Approved
               </span>
             )}
+            {isDirty && (
+              <span className="px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-700">
+                Unsaved
+              </span>
+            )}
           </div>
           <p className="text-slate-500 text-sm">{control.name}</p>
         </div>
       </div>
 
       <div className="flex items-center gap-3">
-        <button className="px-4 py-2 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
+        <button
+          onClick={onCancel}
+          className="px-4 py-2 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+        >
           Cancel
         </button>
-        <button className="flex items-center gap-2 px-4 py-2 bg-main-blue text-white rounded-lg hover:bg-main-blue/90 transition-colors">
+        <button
+          onClick={onSave}
+          disabled={!isDirty}
+          className="flex items-center gap-2 px-4 py-2 bg-main-blue text-white rounded-lg hover:bg-main-blue/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
           <Save className="w-4 h-4" />
           Save Changes
         </button>
@@ -307,7 +431,8 @@ function TabNavigation({
   activeTab: Tab;
   setActiveTab: (tab: Tab) => void;
 }) {
-  const tabs = [Tab.Implementation, Tab.Evidence, Tab.AIAnalysis, Tab.Review];
+  //const tabs = [Tab.Implementation, Tab.Evidence, Tab.AIAnalysis, Tab.Review];
+  const tabs = [Tab.Implementation, Tab.Evidence, Tab.AIAnalysis];
 
   return (
     <div className="flex border-b border-slate-200">
@@ -342,6 +467,7 @@ function ImplementationSection({
   context,
   setContext,
   canEdit,
+  onSave,
 }: {
   status: ControlStatus;
   setStatus: (status: ControlStatus) => void;
@@ -352,6 +478,7 @@ function ImplementationSection({
   context: string;
   setContext: (value: string) => void;
   canEdit: boolean;
+  onSave: () => void;
 }) {
   return (
     <div className="flex flex-col gap-6">
@@ -420,7 +547,10 @@ function ImplementationSection({
       {/* Save Button */}
       {canEdit && (
         <div className="flex justify-center">
-          <button className="flex items-center gap-2 px-6 py-2.5 bg-main-blue text-white rounded-lg hover:bg-main-blue/90 transition-colors">
+          <button
+            onClick={onSave}
+            className="flex items-center gap-2 px-6 py-2.5 bg-main-blue text-white rounded-lg hover:bg-main-blue/90 transition-colors"
+          >
             <Save className="w-4 h-4" />
             Save Changes
           </button>

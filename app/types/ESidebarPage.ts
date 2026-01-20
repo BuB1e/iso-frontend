@@ -1,8 +1,7 @@
 export enum ESidebarPage {
-	Dashboard = "dashboard",
-	Assessment = "assessment",
-	Evidence = "evidence",
-	Report = "report",
-	Audit = "audit",
-	Settings = "settings"
+  Dashboard = "/dashboard",
+  Assessment = "/assessment",
+  Evidence = "/evidence",
+  Summary = "/summary",
+  Settings = "/settings",
 }
