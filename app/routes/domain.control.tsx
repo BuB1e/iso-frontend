@@ -375,7 +375,7 @@ function Header({
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      {/*<div className="flex items-center gap-3">
         <button
           onClick={onCancel}
           className="px-4 py-2 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
@@ -390,7 +390,7 @@ function Header({
           <Save className="w-4 h-4" />
           Save Changes
         </button>
-      </div>
+      </div>*/}
     </div>
   );
 }

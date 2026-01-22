@@ -158,11 +158,10 @@ function AdminDashboard() {
               icon={Building2}
               label="Manage Companies"
             />
-            <QuickLink to="/audit" icon={FileText} label="View Audit Logs" />
             <QuickLink
-              to="/report"
+              to="/summary"
               icon={TrendingUp}
-              label="Generate Reports"
+              label="View summary"
             />
           </div>
         </div>

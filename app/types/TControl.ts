@@ -1,20 +1,7 @@
 import type { ForwardRefExoticComponent, RefAttributes } from "react";
 import type { LucideProps } from "lucide-react";
-
-// Matches Prisma enum: control_status
-export enum ControlStatus {
-  NOT_IMPLEMENTED = "NOT_IMPLEMENTED",
-  PARTIALLY = "PARTIALLY",
-  IMPLEMENTED = "IMPLEMENTED",
-}
-
-// Matches Prisma enum: controls_type
-export enum ControlsType {
-  PHYSICAL = "PHYSICAL",
-  PEOPLE = "PEOPLE",
-  ORGANIZATION = "ORGANIZATION",
-  TECHNOLOGICAL = "TECHNOLOGICAL",
-}
+import { ControlStatus } from "./ControlStatus";
+import { ControlsType } from "./ControlType";
 
 // Matches Prisma model: Controls
 export interface TControl {
@@ -23,6 +10,7 @@ export interface TControl {
   name: string;
   currentPractice: string;
   description: string;
+	guidance: string;
   status: ControlStatus;
   assessmentControlId: number;
   createdAt?: Date;
@@ -32,14 +20,13 @@ export interface TControl {
 // Matches Prisma model: AssessmentControl (Domain grouping)
 export interface TAssessmentControl {
   id: number;
-  count: number; // completed count
-  maxCount: number; // total controls
-  context: string;
-  type: ControlsType;
-  isoAssessmentId: number;
-  controls?: TControl[];
-  createdAt?: Date;
-  updatedAt?: Date;
+	assessmentId: number;
+	count: number;
+	maxCount: number;
+	context: string;
+	type: ControlsType;
+	createdAt: Date;
+	updatedAt: Date;
 }
 
 // Color key for styling based on domain type
