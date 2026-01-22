@@ -41,6 +41,14 @@ function getHighRiskControls(): {
         "Web filtering",
         "Access to external websites should be managed to reduce exposure to malicious content",
         ControlStatus.NOT_IMPLEMENTED,
+        `**Implementation Requirements:**
+1. **Deploy Web Filtering Solution**: Implement a web proxy or DNS-based filtering solution to block access to malicious, inappropriate, or unauthorized websites.
+2. **Define URL Categories**: Create and maintain a list of blocked URL categories (e.g., malware, phishing, gambling, adult content).
+3. **Whitelist/Blacklist Management**: Establish procedures for managing approved and blocked URLs based on business needs.
+4. **SSL/TLS Inspection**: Consider implementing SSL inspection to scan encrypted traffic for threats.
+5. **Logging & Monitoring**: Enable logging of all web traffic and set up alerts for policy violations.
+6. **User Awareness**: Train employees on acceptable use policies and the risks of bypassing web filters.
+7. **Regular Review**: Conduct periodic reviews of filtering rules and blocked categories.`,
         1,
       ),
       assessmentControl: createMockAssessmentControl(
@@ -53,6 +61,15 @@ function getHighRiskControls(): {
         "Use of cryptography",
         "Rules for the effective use of cryptography should be defined and implemented",
         ControlStatus.NOT_IMPLEMENTED,
+        `**Implementation Requirements:**
+1. **Cryptography Policy**: Develop and document a cryptographic policy that defines when, how, and what type of encryption to use.
+2. **Encryption Standards**: Define approved encryption algorithms (e.g., AES-256, RSA-2048+) and prohibit weak or deprecated algorithms.
+3. **Data at Rest**: Implement full-disk encryption on all endpoints, servers, and storage devices containing sensitive data.
+4. **Data in Transit**: Use TLS 1.2+ for all network communications and VPN for remote access.
+5. **Key Management**: Establish key management procedures including generation, storage, distribution, rotation, and destruction of cryptographic keys.
+6. **Certificate Management**: Implement a PKI or certificate management solution for managing digital certificates.
+7. **Compliance Mapping**: Ensure cryptographic controls meet regulatory requirements (GDPR, PCI-DSS, etc.).
+8. **Regular Audits**: Conduct regular audits of cryptographic implementations and key usage.`,
         1,
       ),
       assessmentControl: createMockAssessmentControl(
@@ -65,6 +82,16 @@ function getHighRiskControls(): {
         "Access control",
         "Rules to control physical and logical access to information should be established",
         ControlStatus.NOT_IMPLEMENTED,
+        `**Implementation Requirements:**
+1. **Access Control Policy**: Document a comprehensive access control policy defining principles of least privilege and need-to-know.
+2. **Role-Based Access Control (RBAC)**: Implement RBAC to assign permissions based on job roles rather than individual users.
+3. **User Access Management**: Establish procedures for user registration, modification, and de-registration (joiner/mover/leaver process).
+4. **Authentication Requirements**: Implement strong authentication mechanisms including multi-factor authentication (MFA) for critical systems.
+5. **Access Reviews**: Conduct periodic access reviews (at least quarterly) to verify that access rights remain appropriate.
+6. **Privileged Access Management**: Implement PAM solutions to control, monitor, and audit privileged account usage.
+7. **Network Segmentation**: Segment networks to restrict access between different security zones.
+8. **Physical Access Controls**: Implement badge readers, biometrics, or other controls for physical access to sensitive areas.
+9. **Logging & Monitoring**: Enable access logging and monitor for unauthorized access attempts.`,
         1,
       ),
       assessmentControl: createMockAssessmentControl(ControlsType.ORGANIZATION),
@@ -158,11 +185,7 @@ function AdminDashboard() {
               icon={Building2}
               label="Manage Companies"
             />
-            <QuickLink
-              to="/summary"
-              icon={TrendingUp}
-              label="View summary"
-            />
+            <QuickLink to="/summary" icon={TrendingUp} label="View summary" />
           </div>
         </div>
 

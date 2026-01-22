@@ -185,6 +185,7 @@ export function createMockControl(
   name: string,
   description: string,
   status: ControlStatus = ControlStatus.NOT_IMPLEMENTED,
+	guidance: string,
   assessmentControlId: number = 1,
 ): TControl {
   return {
@@ -194,6 +195,7 @@ export function createMockControl(
     currentPractice: "",
     description,
     status,
+	  guidance,
     assessmentControlId,
   };
 }
@@ -211,9 +213,8 @@ export function createMockAssessmentControl(
     id: Math.random() * 1000,
     count,
     maxCount,
-    context: "",
+    description: "",
     type,
-    isoAssessmentId: 1,
-    controls: [],
+    assessmentId: 1,
   };
 }

@@ -23,10 +23,10 @@ export interface TAssessmentControl {
 	assessmentId: number;
 	count: number;
 	maxCount: number;
-	context: string;
+	description: string;
 	type: ControlsType;
-	createdAt: Date;
-	updatedAt: Date;
+	createdAt?: Date;
+	updatedAt?: Date;
 }
 
 // Color key for styling based on domain type
