@@ -1,3 +1,5 @@
+// API is in Control Service
+
 export interface LlmSuggestRequest {
 	id: number;
 	controlCode: string;
