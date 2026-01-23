@@ -5,3 +5,4 @@ export * from "./AssessmentControlDto";
 export * from "./EvidenceDto";
 export * from "./SuggestionDto";
 export * from "./CompanyDto";
+export * from "./LlmDto";

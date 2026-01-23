@@ -6,9 +6,11 @@ export interface ControlResponseDto {
 	name: string;
 	currentPractice: string;
 	description: string;
+	userContext?: string | null;
+	evidenceDescription?: string | null;
 	guidance: string;
-	status:	 ControlStatus;
 	assessmentControlId: number;
+	status:	 ControlStatus;
 	createdAt: Date;
 	updatedAt: Date;
 }
@@ -18,6 +20,8 @@ export interface CreateControlDto {
 	name: string;
 	currentPractice: string;
 	description: string;
+	userContext?: string;
+	evidenceDescription?: string;
 	guidance: string;
 	assessmentControlId: number;
 	status:	 ControlStatus;
@@ -25,11 +29,9 @@ export interface CreateControlDto {
 
 export interface UpdateControlDto {
 	id: number;
-	code?: string;
-	name?: string;
 	currentPractice?: string;
-	description?: string;
-	guidance?: string;
 	assessmentControlId?: number;
+	userContext?: string;
+	evidenceDescription?: string;
 	status?: ControlStatus;
 }
