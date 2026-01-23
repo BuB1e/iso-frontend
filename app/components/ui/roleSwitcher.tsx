@@ -1,4 +1,4 @@
-import { useUserStore, mockUsers } from "~/stores/userStore";
+import { useUserStore } from "~/stores/userStore";
 import { UserRole, userRoleConfig } from "~/types";
 
 /**

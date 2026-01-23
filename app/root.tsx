@@ -5,10 +5,13 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useLoaderData,
 } from "react-router";
-
+import { useEffect } from "react";
 import type { Route } from "./+types/root";
 import "./app.css";
+import { UserService } from "~/services/UserService";
+import { useUserStore } from "~/stores/userStore";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -22,6 +25,11 @@ export const links: Route.LinksFunction = () => [
     href: "https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap",
   },
 ];
+
+export async function loader() {
+  const users = await UserService.getAllUser();
+  return { users: users || [] };
+}
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -42,6 +50,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  const { users } = useLoaderData<typeof loader>();
+  const setUsers = useUserStore((state) => state.setUsers);
+
+  useEffect(() => {
+    if (users.length > 0) {
+      setUsers(users);
+    }
+  }, [users, setUsers]);
+
   return <Outlet />;
 }
 

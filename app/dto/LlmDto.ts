@@ -11,8 +11,3 @@ export interface LlmSuggestRequest {
 	evidenceDescription?: string;
 	userContext?: string;
 }
-
-export interface LlmSuggestResponse {
-	success: boolean;
-	data: string;
-}

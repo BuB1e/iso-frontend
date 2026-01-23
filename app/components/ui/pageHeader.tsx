@@ -10,6 +10,7 @@ interface PageHeaderProps {
   icon?: React.ComponentType<{ className?: string }>;
   actions?: React.ReactNode;
   badge?: React.ReactNode;
+  children?: React.ReactNode;
   className?: string;
 }
 
@@ -24,6 +25,7 @@ export function PageHeader({
   icon: Icon,
   actions,
   badge,
+  children,
   className,
 }: PageHeaderProps) {
   return (
@@ -61,6 +63,7 @@ export function PageHeader({
           {description && (
             <p className="text-slate-500 text-sm mt-0.5">{description}</p>
           )}
+          {children}
         </div>
       </div>
 

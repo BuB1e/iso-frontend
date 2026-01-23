@@ -6,5 +6,3 @@ export * from "./TUser";
 export * from "./ControlType";
 export * from "./ControlStatus";
 export * from "./IsoStatus";
-export * from "./UserRole";
-

@@ -3,8 +3,16 @@ import type { ForwardRefExoticComponent, RefAttributes } from "react";
 import type { TDomain, ColorKey } from "~/types/TDomain";
 import { Link } from "react-router";
 
+export interface DomainStats {
+  todo: number;
+  inProgress: number;
+  done: number;
+  total: number;
+}
+
 interface DomainCardProps {
   domain: TDomain;
+  stats?: DomainStats;
 }
 
 enum ProgressStatus {
@@ -44,8 +52,10 @@ const colorStyles: Record<
   },
 };
 
-export function DomainCard({ domain }: DomainCardProps) {
+export function DomainCard({ domain, stats }: DomainCardProps) {
   const colors = colorStyles[domain.color];
+  // Default stats if not provided
+  const safeStats = stats || { todo: 0, inProgress: 0, done: 0, total: 0 };
 
   return (
     <Link
@@ -55,8 +65,8 @@ export function DomainCard({ domain }: DomainCardProps) {
 			border-l-10 ${colors.border} hover:scale-101 transition-all duration-75 hover:shadow-2xl gap-4 hover:cursor-pointer`}
     >
       <Header domain={domain} bgColor={colors.bg} textColor={colors.text} />
-      <ProgressStatusRow />
-      <ProgressBar current={1} total={37} />
+      <ProgressStatusRow stats={safeStats} />
+      <ProgressBar current={safeStats.done} total={safeStats.total} />
     </Link>
   );
 }
@@ -181,36 +191,35 @@ function ProgressStatusCard({
   );
 }
 
-// TODO: use real data instead of mock data
-function ProgressStatusRow() {
+function ProgressStatusRow({ stats }: { stats: DomainStats }) {
   return (
     <div className="flex flex-row items-center gap-2 w-full px-4">
       <ProgressStatusCard
         progressStatus={ProgressStatus.Todo}
-        current={1}
-        total={37}
+        current={stats.todo}
+        total={stats.total}
       />
       <ProgressStatusCard
         progressStatus={ProgressStatus.Inprogress}
-        current={1}
-        total={37}
+        current={stats.inProgress}
+        total={stats.total}
       />
       <ProgressStatusCard
         progressStatus={ProgressStatus.Done}
-        current={1}
-        total={37}
+        current={stats.done}
+        total={stats.total}
       />
       <ProgressStatusCard
         progressStatus={ProgressStatus.Total}
-        current={1}
-        total={37}
+        current={stats.total}
+        total={stats.total}
       />
     </div>
   );
 }
 
 function ProgressBar({ current, total }: { current: number; total: number }) {
-  const percentage = Math.round((current / total) * 100);
+  const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
 
   return (
     <div className="flex flex-col items-center px-4 pb-4">

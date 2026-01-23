@@ -1,18 +1,18 @@
-import { useParams } from "react-router";
-import {
-  ControlItem,
-  createMockControl,
-  createMockAssessmentControl,
-} from "~/components/ui/controlItem";
+import { useLoaderData } from "react-router";
+import type { LoaderFunctionArgs } from "react-router";
+import { ControlItem } from "~/components/ui/controlItem";
 import {
   ControlStatus,
   ControlsType,
   controlsTypeDomainMap,
   controlsTypeNameMap,
-  controlsTypeColorMap,
-  type TControl,
-  type TAssessmentControl,
 } from "~/types";
+import { ControlService } from "~/services/ControlService";
+import { AssessmentControlService } from "~/services/AssessmentControlService";
+import { IsoAssessmentService } from "~/services/IsoAssessmentService";
+import type { ControlResponseDto } from "~/dto";
+import { useYearStore } from "~/stores/yearStore";
+import { useUserStore } from "~/stores/userStore";
 
 // Map domain number to ControlsType
 const domainNumberToType: Record<string, ControlsType> = {
@@ -22,153 +22,104 @@ const domainNumberToType: Record<string, ControlsType> = {
   A8: ControlsType.TECHNOLOGICAL,
 };
 
-// TODO: Replace with API call to fetch controls for this domain
-function getMockControls(domainType: ControlsType): TControl[] {
+// Extended interface for component compatibility
+interface DomainControl extends ControlResponseDto {
+  [key: string]: unknown;
+}
+
+// Loader - fetch controls by domain
+export async function loader({ params }: LoaderFunctionArgs) {
+  const domainNumber = params.domainNumber || "A5";
+  const domainType =
+    domainNumberToType[domainNumber] || ControlsType.ORGANIZATION;
+
+  // Fetch all data for filtering
+  const [allControls, assessmentControls, isoAssessments] = await Promise.all([
+    ControlService.getAllControl(),
+    AssessmentControlService.getAllAssessmentControl(),
+    IsoAssessmentService.getAllIsoAssessment(),
+  ]);
+
+  // Initial filter by domain type prefix just to reduce payload if possible,
+  // but strict filtering by year must happen on client.
   const domainNum = controlsTypeDomainMap[domainType];
-  return [
-    createMockControl(
-      `A.${domainNum}.1`,
-      "Policies for information security",
-      "Management direction and support for information security in accordance with business requirements",
-      ControlStatus.NOT_IMPLEMENTED,
-      `**Implementation Requirements:**
-1. **Develop ISMS Policy**: Create a top-level information security policy approved by management that defines the organization's approach to managing information security.
-2. **Define Policy Framework**: Establish a hierarchy of policies covering specific areas (access control, data classification, acceptable use, etc.).
-3. **Align with Business**: Ensure policies support business objectives and comply with legal, regulatory, and contractual requirements.
-4. **Communicate Policies**: Make policies accessible to all employees and relevant external parties.
-5. **Regular Review**: Review and update policies at least annually or when significant changes occur.
-6. **Policy Acknowledgment**: Require employees to acknowledge reading and understanding policies.`,
-      1,
-    ),
-    createMockControl(
-      `A.${domainNum}.2`,
-      "Information security roles and responsibilities",
-      "All information security responsibilities should be defined and allocated",
-      ControlStatus.PARTIALLY,
-      `**Implementation Requirements:**
-1. **Define Roles**: Clearly define information security roles (CISO, Security Manager, Asset Owners, Custodians, Users).
-2. **Document Responsibilities**: Create a RACI matrix for security-related tasks and decisions.
-3. **Assign Ownership**: Assign owners for all information assets and security controls.
-4. **Include in Job Descriptions**: Incorporate security responsibilities into job descriptions and employment contracts.
-5. **Communicate Expectations**: Ensure all staff understand their security responsibilities through training.
-6. **Regular Review**: Review role assignments when organizational changes occur.`,
-      1,
-    ),
-    createMockControl(
-      `A.${domainNum}.3`,
-      "Segregation of duties",
-      "Conflicting duties and areas of responsibility should be segregated",
-      ControlStatus.IMPLEMENTED,
-      `**Implementation Requirements:**
-1. **Identify Conflicts**: Analyze business processes to identify conflicting duties that could lead to fraud or error.
-2. **Separate Critical Functions**: Ensure no single person can authorize, execute, and record a transaction.
-3. **Access Controls**: Implement system access controls that enforce segregation of duties.
-4. **Compensating Controls**: Where segregation is not possible (small teams), implement additional monitoring and review controls.
-5. **Document Exceptions**: Maintain documentation of any exceptions and supporting compensating controls.
-6. **Periodic Review**: Regularly audit access rights to ensure segregation is maintained.`,
-      1,
-    ),
-    createMockControl(
-      `A.${domainNum}.4`,
-      "Management responsibilities",
-      "Management should require all employees to apply information security policies",
-      ControlStatus.NOT_IMPLEMENTED,
-      `**Implementation Requirements:**
-1. **Leadership Commitment**: Obtain visible commitment from senior management for information security.
-2. **Resource Allocation**: Ensure adequate budget and resources for security initiatives.
-3. **Set Expectations**: Clearly communicate that security compliance is mandatory for all employees.
-4. **Lead by Example**: Ensure management follows security policies themselves.
-5. **Performance Metrics**: Include security compliance in performance evaluations.
-6. **Regular Updates**: Require management to stay informed about security risks and incidents.
-7. **Accountability**: Establish consequences for non-compliance with security policies.`,
-      1,
-    ),
-    createMockControl(
-      `A.${domainNum}.5`,
-      "Contact with authorities",
-      "Appropriate contacts with relevant authorities should be maintained",
-      ControlStatus.PARTIALLY,
-      `**Implementation Requirements:**
-1. **Identify Authorities**: List all relevant authorities (law enforcement, regulators, data protection authorities, emergency services).
-2. **Establish Contacts**: Maintain up-to-date contact information for each authority.
-3. **Define Procedures**: Document when and how to contact authorities (e.g., data breach notification, incident reporting).
-4. **Compliance Requirements**: Understand mandatory reporting requirements for your industry.
-5. **Relationship Building**: Participate in industry forums and maintain relationships with authorities.
-6. **Regular Updates**: Review contact list annually and update as needed.`,
-      1,
-    ),
-    createMockControl(
-      `A.${domainNum}.6`,
-      "Contact with special interest groups",
-      "Appropriate contacts with special interest groups should be maintained",
-      ControlStatus.NOT_IMPLEMENTED,
-      `**Implementation Requirements:**
-1. **Identify Groups**: List relevant security forums, professional associations, and vendor groups (ISACs, OWASP, ISACA, etc.).
-2. **Membership**: Maintain active memberships in relevant industry groups.
-3. **Threat Intelligence**: Subscribe to threat intelligence feeds and security advisories.
-4. **Knowledge Sharing**: Participate in information sharing about threats and best practices.
-5. **Stay Current**: Attend conferences, webinars, and training to stay updated on security trends.
-6. **Document Benefits**: Track valuable intelligence received and actions taken.`,
-      1,
-    ),
-    createMockControl(
-      `A.${domainNum}.7`,
-      "Threat intelligence",
-      "Information about technical vulnerabilities should be obtained in a timely fashion",
-      ControlStatus.NOT_IMPLEMENTED,
-      `**Implementation Requirements:**
-1. **Subscribe to Feeds**: Subscribe to vulnerability databases (NVD, CVE), vendor advisories, and threat intelligence services.
-2. **Monitor Sources**: Regularly monitor security news, blogs, and mailing lists for emerging threats.
-3. **Vulnerability Assessment**: Implement regular vulnerability scanning and penetration testing.
-4. **Patch Management**: Establish procedures for timely evaluation and application of security patches.
-5. **Risk Assessment**: Evaluate the relevance of vulnerabilities to your environment and prioritize remediation.
-6. **Incident Awareness**: Share threat intelligence internally to raise awareness and improve detection.`,
-      1,
-    ),
-    createMockControl(
-      `A.${domainNum}.8`,
-      "Information security in project management",
-      "Information security should be integrated into project management",
-      ControlStatus.PARTIALLY,
-      `**Implementation Requirements:**
-1. **Security in SDLC**: Integrate security requirements into all phases of the project lifecycle.
-2. **Security Requirements**: Include security requirements gathering as part of project initiation.
-3. **Risk Assessment**: Conduct security risk assessments for all new projects and significant changes.
-4. **Security Reviews**: Include security review gates at key project milestones.
-5. **Secure Design**: Apply secure design principles (defense in depth, least privilege, fail-safe defaults).
-6. **Security Testing**: Include security testing (code review, vulnerability assessment) before deployment.
-7. **Documentation**: Ensure security documentation is part of project deliverables.`,
-      1,
-    ),
-  ];
+  const controls = allControls.filter((c: ControlResponseDto) =>
+    c.code.startsWith(`A.${domainNum}`),
+  );
+
+  return {
+    controls: controls as DomainControl[],
+    assessmentControls,
+    isoAssessments,
+    domainNumber,
+    domainType,
+  };
 }
 
 export default function DomainDetail() {
-  const { domainNumber } = useParams();
-  const domainType =
-    domainNumberToType[domainNumber as string] || ControlsType.ORGANIZATION;
-
-  // TODO: Fetch from API
-  const controls = getMockControls(domainType);
-  const assessmentControl = createMockAssessmentControl(
+  const {
+    controls,
+    assessmentControls,
+    isoAssessments,
+    domainNumber,
     domainType,
-    controls.filter((c) => c.status === ControlStatus.IMPLEMENTED).length,
-    controls.length,
+  } = useLoaderData<typeof loader>();
+  const { currentYear } = useYearStore();
+  const currentUser = useUserStore((state) => state.currentUser);
+
+  // Filter controls by current year AND user's company
+  // 1. Find assessments for current year
+  const activeAssessments = isoAssessments.filter(
+    (a) =>
+      a.year === currentYear &&
+      (currentUser?.companyId ? a.companyId === currentUser.companyId : true),
+  );
+  const activeAssessmentIds = activeAssessments.map((a) => a.id);
+
+  // 2. Find assessment controls linked to active assessments
+  const activeAssessmentControls = assessmentControls.filter((ac) =>
+    activeAssessmentIds.includes(ac.isoAssessmentId),
+  );
+  const activeAssessmentControlIds = activeAssessmentControls.map(
+    (ac) => ac.id,
   );
 
-  const domainName = controlsTypeNameMap[domainType];
-  const domainNum = controlsTypeDomainMap[domainType];
+  // 3. Filter controls linked to active assessment controls
+  const filteredControls = controls.filter((c) =>
+    activeAssessmentControlIds.includes(c.assessmentControlId),
+  );
 
-  // Calculate progress stats
-  const implemented = controls.filter(
+  const domainName = controlsTypeNameMap[domainType as ControlsType];
+  const domainNum = controlsTypeDomainMap[domainType as ControlsType];
+
+  // Calculate progress stats based on filtered controls
+  const implemented = filteredControls.filter(
     (c) => c.status === ControlStatus.IMPLEMENTED,
   ).length;
-  const partial = controls.filter(
-    (c) => c.status === ControlStatus.PARTIALLY,
-  ).length;
-  const notImplemented = controls.filter(
-    (c) => c.status === ControlStatus.NOT_IMPLEMENTED,
-  ).length;
+  // const partial = filteredControls.filter(
+  //   (c) => c.status === ControlStatus.PARTIALLY,
+  // ).length; // Unused variable
+  // const notImplemented = filteredControls.filter(
+  //   (c) => c.status === ControlStatus.NOT_IMPLEMENTED,
+  // ).length; // Unused variable
+
+  // Create assessment control context for the ControlItem component (for current year)
+  // We need the assessment control object for the item type.
+  // We pick the first one matching the type for this year as they are redundant by type per assessment
+  const currentAssessmentControl =
+    activeAssessmentControls.find((ac) => ac.type === domainType) ||
+    ({
+      id: 0,
+      assessmentId: 0,
+      type: domainType as ControlsType,
+      count: implemented,
+      maxCount: filteredControls.length,
+      description: domainName,
+    } as any); // Fallback or partial mock if no year match
+
+  // But ControlItem needs SPECIFIC assessment control for each item?
+  // Actually ControlItem uses assessmentControl.type mostly.
+  // And links.
 
   return (
     <div className="flex flex-col gap-6 w-full">
@@ -182,7 +133,7 @@ export default function DomainDetail() {
         </div>
         <p className="text-slate-500 text-sm">
           Review and assess the implementation status of each control in this
-          domain.
+          domain for {currentYear}.
         </p>
 
         {/* Progress Summary */}
@@ -195,26 +146,46 @@ export default function DomainDetail() {
           </div>
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full bg-yellow-500"></span>
-            <span className="text-sm text-slate-600">{partial} Partially</span>
+            <span className="text-sm text-slate-600">
+              {
+                filteredControls.filter(
+                  (c) => c.status === ControlStatus.PARTIALLY,
+                ).length
+              }{" "}
+              Partially
+            </span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-red-500"></span>
+            <span className="w-3 h-3 rounded-full bg-gray-300"></span>
             <span className="text-sm text-slate-600">
-              {notImplemented} Not Implemented
+              {
+                filteredControls.filter(
+                  (c) => c.status === ControlStatus.NOT_IMPLEMENTED,
+                ).length
+              }{" "}
+              Not Implemented
             </span>
           </div>
         </div>
       </div>
 
       {/* Controls List */}
-      <div className="flex flex-col gap-3 w-full">
-        {controls.map((control) => (
-          <ControlItem
-            key={control.code}
-            control={control}
-            assessmentControl={assessmentControl}
-          />
-        ))}
+      <div className="flex flex-col gap-3">
+        {filteredControls.length > 0 ? (
+          filteredControls.map((control) => (
+            <ControlItem
+              key={control.id} // Use ID as key, not code, since codes assume uniqueness but filtering ensures one per year
+              control={control}
+              assessmentControl={currentAssessmentControl}
+            />
+          ))
+        ) : (
+          <div className="p-8 text-center border border-dashed border-slate-300 rounded-xl">
+            <p className="text-slate-500">
+              No controls found for {currentYear}.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

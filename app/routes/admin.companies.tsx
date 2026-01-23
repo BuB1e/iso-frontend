@@ -1,8 +1,14 @@
-import { useState } from "react";
-import { Building2, Plus, Edit, Trash2, Users, FileText } from "lucide-react";
+import { useEffect } from "react";
+import {
+  useLoaderData,
+  useActionData,
+  Form,
+  useNavigation,
+} from "react-router";
+import type { ActionFunctionArgs } from "react-router";
+import { Building2, Plus, Edit, Trash2 } from "lucide-react";
 import { PageHeader, SectionHeader } from "~/components/ui/pageHeader";
 import { DataTable, type Column } from "~/components/ui/dataTable";
-import { StatusBadge } from "~/components/ui/statusBadge";
 import {
   Modal,
   ModalContent,
@@ -11,79 +17,98 @@ import {
   ModalDescription,
   ModalFooter,
 } from "~/components/ui/modal";
+import { CompanyService } from "~/services/CompanyService";
+import type { CompanyResponseDto } from "~/dto";
+import { useCompanyFormStore } from "~/stores";
 
-// Company interface
-interface Company {
-  [key: string]: unknown; // Index signature for DataTable compatibility
-  id: number;
-  code: string;
-  name: string;
-  details: string;
-  usersCount: number;
-  assessmentsCount: number;
-  status: "active" | "inactive";
-  createdAt: string;
+// Extended interface for DataTable compatibility
+interface Company extends CompanyResponseDto {
+  [key: string]: unknown;
 }
 
-// Mock data
-const mockCompanies: Company[] = [
-  {
-    id: 1,
-    code: "ACME",
-    name: "Acme Corp",
-    details: "Technology solutions provider",
-    usersCount: 5,
-    assessmentsCount: 3,
-    status: "active",
-    createdAt: "2025-01-15",
-  },
-  {
-    id: 2,
-    code: "TECH",
-    name: "TechStart Inc",
-    details: "Startup accelerator",
-    usersCount: 3,
-    assessmentsCount: 1,
-    status: "active",
-    createdAt: "2025-06-01",
-  },
-  {
-    id: 3,
-    code: "SEC",
-    name: "SecureData Ltd",
-    details: "Data security specialists",
-    usersCount: 8,
-    assessmentsCount: 4,
-    status: "active",
-    createdAt: "2024-11-20",
-  },
-  {
-    id: 4,
-    code: "OLD",
-    name: "Legacy Systems",
-    details: "Legacy system maintenance",
-    usersCount: 2,
-    assessmentsCount: 1,
-    status: "inactive",
-    createdAt: "2024-03-10",
-  },
-];
+// Loader - fetch companies from API
+export async function loader() {
+  const companies = await CompanyService.getAllCompany();
+  return { companies: companies as Company[] };
+}
+
+// Action - handle form submissions
+export async function action({ request }: ActionFunctionArgs) {
+  const formData = await request.formData();
+  const intent = formData.get("intent") as string;
+
+  try {
+    if (intent === "create") {
+      const result = await CompanyService.createCompany({
+        code: formData.get("code") as string,
+        name: formData.get("name") as string,
+        details: formData.get("details") as string,
+      });
+      return { success: !!result, intent };
+    }
+
+    if (intent === "update") {
+      const result = await CompanyService.updateCompanyById({
+        id: Number(formData.get("id")),
+        name: formData.get("name") as string,
+        details: formData.get("details") as string,
+      });
+      return { success: !!result, intent };
+    }
+
+    if (intent === "delete") {
+      const result = await CompanyService.deleteCompanyById(
+        Number(formData.get("id")),
+      );
+      return { success: !!result, intent };
+    }
+
+    return { success: false, error: "Unknown intent" };
+  } catch (error) {
+    return { success: false, error: String(error) };
+  }
+}
 
 export default function AdminCompanies() {
-  const [companies, setCompanies] = useState(mockCompanies);
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [companyForm, setCompanyForm] = useState({
-    code: "",
-    name: "",
-    details: "",
-  });
+  const { companies } = useLoaderData<typeof loader>();
+  const actionData = useActionData<typeof action>();
+  const navigation = useNavigation();
+  const isSubmitting = navigation.state === "submitting";
 
-  const handleAddCompany = () => {
-    // TODO: API call to add company
-    console.log("Adding company:", companyForm);
-    setIsAddModalOpen(false);
-    setCompanyForm({ code: "", name: "", details: "" });
-    alert("Company added successfully!");
+  // Zustand form store
+  const {
+    code,
+    name,
+    details,
+    isEditing,
+    editingId,
+    setField,
+    startEdit,
+    reset,
+  } = useCompanyFormStore();
+
+  // Clear form after successful action
+  useEffect(() => {
+    if (actionData?.success) {
+      reset();
+    }
+  }, [actionData, reset]);
+
+  // Modal state derived from form store
+  const isModalOpen = code !== "" || name !== "" || isEditing;
+
+  const openCreateModal = () => {
+    reset();
+    setField("code", " "); // Trigger modal open
+    setField("code", "");
+  };
+
+  const openEditModal = (company: Company) => {
+    startEdit(company.id, {
+      code: company.code,
+      name: company.name,
+      details: company.details || "",
+    });
   };
 
   const columns: Column<Company>[] = [
@@ -91,71 +116,58 @@ export default function AdminCompanies() {
       key: "code",
       header: "Code",
       render: (company) => (
-        <span className="px-2 py-1 bg-slate-100 text-slate-700 font-mono text-sm rounded">
+        <span className="font-mono text-sm bg-slate-100 px-2 py-1 rounded">
           {company.code}
         </span>
       ),
-      className: "w-24",
     },
     {
       key: "name",
       header: "Company Name",
       render: (company) => (
-        <div className="flex flex-col">
-          <span className="font-medium text-slate-800">{company.name}</span>
-          <span className="text-xs text-slate-500">{company.details}</span>
-        </div>
+        <span className="font-medium text-slate-800">{company.name}</span>
       ),
     },
     {
-      key: "usersCount",
-      header: "Users",
+      key: "details",
+      header: "Details",
       render: (company) => (
-        <div className="flex items-center gap-2">
-          <Users className="w-4 h-4 text-slate-400" />
-          <span>{company.usersCount}</span>
-        </div>
+        <span className="text-slate-500 text-sm">{company.details || "-"}</span>
       ),
-      className: "w-24",
-    },
-    {
-      key: "assessmentsCount",
-      header: "Assessments",
-      render: (company) => (
-        <div className="flex items-center gap-2">
-          <FileText className="w-4 h-4 text-slate-400" />
-          <span>{company.assessmentsCount}</span>
-        </div>
-      ),
-      className: "w-32",
-    },
-    {
-      key: "status",
-      header: "Status",
-      render: (company) => (
-        <StatusBadge
-          label={company.status === "active" ? "Active" : "Inactive"}
-          variant={company.status === "active" ? "success" : "default"}
-        />
-      ),
-      className: "w-24",
     },
     {
       key: "createdAt",
       header: "Created",
-      className: "w-28",
+      render: (company) => (
+        <span className="text-sm text-slate-500">
+          {new Date(company.createdAt).toLocaleDateString()}
+        </span>
+      ),
     },
     {
       key: "actions",
       header: "",
       render: (company) => (
         <div className="flex items-center gap-2">
-          <button className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-main-blue">
+          <button
+            onClick={() => openEditModal(company)}
+            className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-main-blue"
+          >
             <Edit className="w-4 h-4" />
           </button>
-          <button className="p-2 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-500">
-            <Trash2 className="w-4 h-4" />
-          </button>
+          <Form method="post">
+            <input type="hidden" name="intent" value="delete" />
+            <input type="hidden" name="id" value={company.id} />
+            <button
+              type="submit"
+              className="p-2 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-500"
+              onClick={(e) => {
+                if (!confirm("Delete this company?")) e.preventDefault();
+              }}
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </Form>
         </div>
       ),
       className: "w-24",
@@ -166,11 +178,11 @@ export default function AdminCompanies() {
     <div className="flex flex-col min-h-screen py-8 px-8 lg:px-16 bg-slate-50/50 gap-6">
       <PageHeader
         title="Company Management"
-        description="Manage companies and their ISO 27001 assessments"
+        description="Manage organizations and their assessments"
         icon={Building2}
         actions={
           <button
-            onClick={() => setIsAddModalOpen(true)}
+            onClick={openCreateModal}
             className="flex items-center gap-2 px-4 py-2 bg-main-blue text-white rounded-lg hover:bg-main-blue/90 transition-colors"
           >
             <Plus className="w-4 h-4" />
@@ -180,7 +192,7 @@ export default function AdminCompanies() {
       />
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 gap-4">
         <div className="bg-white rounded-xl p-4 border border-slate-200">
           <p className="text-sm text-slate-500">Total Companies</p>
           <p className="text-2xl font-bold text-slate-800">
@@ -188,15 +200,9 @@ export default function AdminCompanies() {
           </p>
         </div>
         <div className="bg-white rounded-xl p-4 border border-slate-200">
-          <p className="text-sm text-slate-500">Active Companies</p>
-          <p className="text-2xl font-bold text-slate-800">
-            {companies.filter((c) => c.status === "active").length}
-          </p>
-        </div>
-        <div className="bg-white rounded-xl p-4 border border-slate-200">
-          <p className="text-sm text-slate-500">Total Assessments</p>
-          <p className="text-2xl font-bold text-slate-800">
-            {companies.reduce((acc, c) => acc + c.assessmentsCount, 0)}
+          <p className="text-sm text-slate-500">Active Assessments</p>
+          <p className="text-2xl font-bold text-green-600">
+            {companies.length}
           </p>
         </div>
       </div>
@@ -209,93 +215,105 @@ export default function AdminCompanies() {
           columns={columns}
           keyField="id"
           searchPlaceholder="Search companies..."
-          searchFields={["code", "name", "details"]}
+          searchFields={["name", "code"]}
           pageSize={10}
         />
       </div>
 
-      {/* Add Company Modal */}
-      <Modal open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
+      {/* Create/Edit Modal */}
+      <Modal open={isModalOpen} onOpenChange={(open) => !open && reset()}>
         <ModalContent size="md">
           <ModalHeader>
-            <ModalTitle>Add New Company</ModalTitle>
+            <ModalTitle>
+              {isEditing ? "Edit Company" : "Add New Company"}
+            </ModalTitle>
             <ModalDescription>
-              Create a new company to manage their ISO 27001 assessments.
+              {isEditing
+                ? "Update company information"
+                : "Create a new organization in the system"}
             </ModalDescription>
           </ModalHeader>
 
-          <div className="flex flex-col gap-4 py-4">
-            {/* Company Code */}
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-slate-700">
-                Company Code
-              </label>
-              <input
-                type="text"
-                value={companyForm.code}
-                onChange={(e) =>
-                  setCompanyForm({
-                    ...companyForm,
-                    code: e.target.value.toUpperCase(),
-                  })
-                }
-                className="px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-main-blue/20 focus:border-main-blue font-mono"
-                placeholder="ACME"
-                maxLength={10}
-              />
-              <p className="text-xs text-slate-500">
-                Unique identifier for the company (max 10 characters)
-              </p>
+          <Form method="post">
+            <input
+              type="hidden"
+              name="intent"
+              value={isEditing ? "update" : "create"}
+            />
+            {isEditing && (
+              <input type="hidden" name="id" value={editingId || ""} />
+            )}
+
+            <div className="flex flex-col gap-4 py-4">
+              {/* Code - only for create */}
+              {!isEditing && (
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-medium text-slate-700">
+                    Company Code
+                  </label>
+                  <input
+                    type="text"
+                    name="code"
+                    value={code}
+                    onChange={(e) => setField("code", e.target.value)}
+                    className="px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-main-blue/20 focus:border-main-blue"
+                    placeholder="ACME"
+                    required
+                  />
+                </div>
+              )}
+
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-medium text-slate-700">
+                  Company Name
+                </label>
+                <input
+                  type="text"
+                  name="name"
+                  value={name}
+                  onChange={(e) => setField("name", e.target.value)}
+                  className="px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-main-blue/20 focus:border-main-blue"
+                  placeholder="Acme Corporation"
+                  required
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-medium text-slate-700">
+                  Details
+                </label>
+                <textarea
+                  name="details"
+                  value={details}
+                  onChange={(e) => setField("details", e.target.value)}
+                  className="px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-main-blue/20 focus:border-main-blue resize-none"
+                  placeholder="Additional information about the company"
+                  rows={3}
+                />
+              </div>
             </div>
 
-            {/* Company Name */}
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-slate-700">
-                Company Name
-              </label>
-              <input
-                type="text"
-                value={companyForm.name}
-                onChange={(e) =>
-                  setCompanyForm({ ...companyForm, name: e.target.value })
-                }
-                className="px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-main-blue/20 focus:border-main-blue"
-                placeholder="Acme Corporation"
-              />
-            </div>
-
-            {/* Details */}
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-slate-700">
-                Details
-              </label>
-              <textarea
-                value={companyForm.details}
-                onChange={(e) =>
-                  setCompanyForm({ ...companyForm, details: e.target.value })
-                }
-                rows={3}
-                className="px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-main-blue/20 focus:border-main-blue resize-none"
-                placeholder="Brief description of the company..."
-              />
-            </div>
-          </div>
-
-          <ModalFooter>
-            <button
-              onClick={() => setIsAddModalOpen(false)}
-              className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleAddCompany}
-              className="flex items-center gap-2 px-4 py-2 bg-main-blue text-white rounded-lg hover:bg-main-blue/90"
-            >
-              <Plus className="w-4 h-4" />
-              Add Company
-            </button>
-          </ModalFooter>
+            <ModalFooter>
+              <button
+                type="button"
+                onClick={reset}
+                className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="flex items-center gap-2 px-4 py-2 bg-main-blue text-white rounded-lg hover:bg-main-blue/90 disabled:opacity-50"
+              >
+                {isSubmitting
+                  ? "Saving..."
+                  : isEditing
+                    ? "Save Changes"
+                    : "Create Company"}
+              </button>
+            </ModalFooter>
+          </Form>
         </ModalContent>
       </Modal>
     </div>

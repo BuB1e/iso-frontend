@@ -11,131 +11,144 @@ import {
   Clock,
   Star,
 } from "lucide-react";
-import { Link } from "react-router";
+import { Link, useLoaderData } from "react-router";
+import { useEffect } from "react";
 import { DashboardCard } from "~/components/ui/card";
-import {
-  ControlItem,
-  createMockControl,
-  createMockAssessmentControl,
-} from "~/components/ui/controlItem";
+import { ControlItem } from "~/components/ui/controlItem";
 import { StatusBadge } from "~/components/ui/statusBadge";
 import { PageHeader, SectionHeader } from "~/components/ui/pageHeader";
 import {
   ControlStatus,
-  ControlsType,
   type TControl,
   type TAssessmentControl,
   UserRole,
 } from "~/types";
 import { useUserStore } from "~/stores/userStore";
+import { useYearStore } from "~/stores/yearStore";
+import { CompanyService } from "~/services/CompanyService";
+import { UserService } from "~/services/UserService";
+import { IsoAssessmentService } from "~/services/IsoAssessmentService";
+import { ControlService } from "~/services/ControlService";
+import { AssessmentControlService } from "~/services/AssessmentControlService";
 
-// Mock high-risk controls
-function getHighRiskControls(): {
-  control: TControl;
-  assessmentControl: TAssessmentControl;
-}[] {
-  return [
-    {
-      control: createMockControl(
-        "A.8.23",
-        "Web filtering",
-        "Access to external websites should be managed to reduce exposure to malicious content",
-        ControlStatus.NOT_IMPLEMENTED,
-        `**Implementation Requirements:**
-1. **Deploy Web Filtering Solution**: Implement a web proxy or DNS-based filtering solution to block access to malicious, inappropriate, or unauthorized websites.
-2. **Define URL Categories**: Create and maintain a list of blocked URL categories (e.g., malware, phishing, gambling, adult content).
-3. **Whitelist/Blacklist Management**: Establish procedures for managing approved and blocked URLs based on business needs.
-4. **SSL/TLS Inspection**: Consider implementing SSL inspection to scan encrypted traffic for threats.
-5. **Logging & Monitoring**: Enable logging of all web traffic and set up alerts for policy violations.
-6. **User Awareness**: Train employees on acceptable use policies and the risks of bypassing web filters.
-7. **Regular Review**: Conduct periodic reviews of filtering rules and blocked categories.`,
-        1,
-      ),
-      assessmentControl: createMockAssessmentControl(
-        ControlsType.TECHNOLOGICAL,
-      ),
-    },
-    {
-      control: createMockControl(
-        "A.8.24",
-        "Use of cryptography",
-        "Rules for the effective use of cryptography should be defined and implemented",
-        ControlStatus.NOT_IMPLEMENTED,
-        `**Implementation Requirements:**
-1. **Cryptography Policy**: Develop and document a cryptographic policy that defines when, how, and what type of encryption to use.
-2. **Encryption Standards**: Define approved encryption algorithms (e.g., AES-256, RSA-2048+) and prohibit weak or deprecated algorithms.
-3. **Data at Rest**: Implement full-disk encryption on all endpoints, servers, and storage devices containing sensitive data.
-4. **Data in Transit**: Use TLS 1.2+ for all network communications and VPN for remote access.
-5. **Key Management**: Establish key management procedures including generation, storage, distribution, rotation, and destruction of cryptographic keys.
-6. **Certificate Management**: Implement a PKI or certificate management solution for managing digital certificates.
-7. **Compliance Mapping**: Ensure cryptographic controls meet regulatory requirements (GDPR, PCI-DSS, etc.).
-8. **Regular Audits**: Conduct regular audits of cryptographic implementations and key usage.`,
-        1,
-      ),
-      assessmentControl: createMockAssessmentControl(
-        ControlsType.TECHNOLOGICAL,
-      ),
-    },
-    {
-      control: createMockControl(
-        "A.5.15",
-        "Access control",
-        "Rules to control physical and logical access to information should be established",
-        ControlStatus.NOT_IMPLEMENTED,
-        `**Implementation Requirements:**
-1. **Access Control Policy**: Document a comprehensive access control policy defining principles of least privilege and need-to-know.
-2. **Role-Based Access Control (RBAC)**: Implement RBAC to assign permissions based on job roles rather than individual users.
-3. **User Access Management**: Establish procedures for user registration, modification, and de-registration (joiner/mover/leaver process).
-4. **Authentication Requirements**: Implement strong authentication mechanisms including multi-factor authentication (MFA) for critical systems.
-5. **Access Reviews**: Conduct periodic access reviews (at least quarterly) to verify that access rights remain appropriate.
-6. **Privileged Access Management**: Implement PAM solutions to control, monitor, and audit privileged account usage.
-7. **Network Segmentation**: Segment networks to restrict access between different security zones.
-8. **Physical Access Controls**: Implement badge readers, biometrics, or other controls for physical access to sensitive areas.
-9. **Logging & Monitoring**: Enable access logging and monitor for unauthorized access attempts.`,
-        1,
-      ),
-      assessmentControl: createMockAssessmentControl(ControlsType.ORGANIZATION),
-    },
-  ];
+// Helper to calculate compliance stats
+function calculateStats(controls: TControl[]) {
+  const total = controls.length;
+  const implemented = controls.filter(
+    (c) => c.status === ControlStatus.IMPLEMENTED,
+  ).length;
+  const partial = controls.filter(
+    (c) => c.status === ControlStatus.PARTIALLY,
+  ).length;
+  const notImplemented = controls.filter(
+    (c) => c.status === ControlStatus.NOT_IMPLEMENTED,
+  ).length;
+  return { total, implemented, partial, notImplemented };
+}
+
+// Loader - fetch all data for dashboards
+export async function loader() {
+  const [companies, users, isoAssessments, controls, assessmentControls] =
+    await Promise.all([
+      CompanyService.getAllCompany(),
+      UserService.getAllUser(),
+      IsoAssessmentService.getAllIsoAssessment(),
+      ControlService.getAllControl(),
+      AssessmentControlService.getAllAssessmentControl(),
+    ]);
+
+  return {
+    companies,
+    users: users || [],
+    isoAssessments,
+    controls,
+    assessmentControls,
+  };
 }
 
 export default function Dashboard() {
+  const { companies, users, isoAssessments, controls, assessmentControls } =
+    useLoaderData<typeof loader>();
   const currentUser = useUserStore((state) => state.currentUser);
+  const { currentYear, setAllYears } = useYearStore();
+
+  // Populate available years in store
+  useEffect(() => {
+    if (isoAssessments.length > 0) {
+      const years = Array.from(new Set(isoAssessments.map((a) => a.year))).sort(
+        (a, b) => b - a,
+      );
+      setAllYears(years);
+    }
+  }, [isoAssessments, setAllYears]);
 
   if (!currentUser) {
     return <div>Loading...</div>;
   }
 
+  // Filter data by current year
+  // Filter data by current year AND user's company
+  const filteredAssessments = isoAssessments.filter(
+    (a) =>
+      a.year === currentYear &&
+      (currentUser.companyId ? a.companyId === currentUser.companyId : true),
+  );
+  const filteredAssessmentIds = filteredAssessments.map((a) => a.id);
+
+  // Filter downstream data (for Internal Dashboard)
+  // 1. Get assessment controls linked to filtered assessments
+  const filteredAssessmentControls = assessmentControls.filter((ac) =>
+    filteredAssessmentIds.includes(ac.isoAssessmentId),
+  );
+  const filteredAssessmentControlIds = filteredAssessmentControls.map(
+    (ac) => ac.id,
+  );
+
+  // 2. Get controls linked to filtered assessment controls
+  const filteredControls = controls.filter((c) =>
+    filteredAssessmentControlIds.includes(c.assessmentControlId),
+  );
+
   // Render different dashboards based on role
   switch (currentUser.role) {
     case UserRole.ADMIN:
-      return <AdminDashboard />;
-    case UserRole.EXTERNAL_EXPERT:
-      return <ExternalExpertDashboard />;
+      return (
+        <AdminDashboard
+          companies={companies}
+          users={users}
+          isoAssessments={filteredAssessments}
+        />
+      );
     case UserRole.INTERNAL_EXPERT:
+      // InternalExpert needs TAssessmentControl (domains)
+      // assessmentControls from service are AssessmentControlResponseDto, which might need mapping to TAssessmentControl if types differ
+      // TAssessmentControl: { id, count, maxCount, type, assessmentId, description }
+      // DTO: { id, code, description, type, isoAssessmentId }
+      // We assume DTO matches closely enough or we cast/map
+      // We'll cast for now as TAssessmentControl is cleaner
+      return (
+        <InternalExpertDashboard
+          controls={filteredControls}
+          assessmentControls={
+            filteredAssessmentControls as unknown as TAssessmentControl[]
+          }
+        />
+      );
+    case UserRole.EXTERNAL_EXPERT:
+      return <ExternalExpertDashboard companies={companies} />;
     default:
-      return <InternalExpertDashboard />;
+      return <div className="p-8">Unknown Role</div>;
   }
 }
 
 // ============ ADMIN DASHBOARD ============
-function AdminDashboard() {
-  const mockStats = {
-    totalCompanies: 4,
-    totalUsers: 12,
-    totalAssessments: 8,
-    pendingReviews: 15,
+function AdminDashboard({ companies, users, isoAssessments }: any) {
+  const stats = {
+    totalCompanies: companies.length,
+    totalUsers: users.length,
+    totalAssessments: isoAssessments.length,
+    pendingReviews: 0, // No review service yet
   };
-
-  const recentActivity = [
-    { user: "John Doe", action: "Updated control A.5.1", time: "2 hours ago" },
-    {
-      user: "Jane Smith",
-      action: "Approved control A.6.2",
-      time: "4 hours ago",
-    },
-    { user: "Bob Wilson", action: "Uploaded evidence", time: "Yesterday" },
-  ];
 
   return (
     <div className="flex flex-col min-h-screen py-8 px-8 lg:px-16 bg-slate-50/50 gap-6">
@@ -150,35 +163,34 @@ function AdminDashboard() {
         <StatCard
           icon={Building2}
           label="Total Companies"
-          value={mockStats.totalCompanies}
+          value={stats.totalCompanies}
           color="blue"
         />
         <StatCard
           icon={Users}
           label="Total Users"
-          value={mockStats.totalUsers}
+          value={stats.totalUsers}
           color="green"
         />
         <StatCard
           icon={FileText}
           label="Assessments"
-          value={mockStats.totalAssessments}
+          value={stats.totalAssessments}
           color="purple"
         />
         <StatCard
           icon={Clock}
           label="Pending Reviews"
-          value={mockStats.pendingReviews}
+          value={stats.pendingReviews}
           color="yellow"
         />
       </div>
 
-      {/* Quick Links & Activity */}
+      {/* Quick Links */}
       <div className="grid grid-cols-2 gap-6">
-        {/* Quick Links */}
-        <div className="bg-white rounded-xl p-6 border border-slate-200">
+        <div className="bg-white rounded-xl p-6 border border-slate-200 col-span-2">
           <SectionHeader title="Quick Actions" />
-          <div className="grid grid-cols-2 gap-3 mt-4">
+          <div className="grid grid-cols-3 gap-3 mt-4">
             <QuickLink to="/admin/users" icon={Users} label="Manage Users" />
             <QuickLink
               to="/admin/companies"
@@ -188,50 +200,46 @@ function AdminDashboard() {
             <QuickLink to="/summary" icon={TrendingUp} label="View summary" />
           </div>
         </div>
-
-        {/* Recent Activity */}
-        <div className="bg-white rounded-xl p-6 border border-slate-200">
-          <SectionHeader title="Recent Activity" />
-          <div className="flex flex-col gap-3 mt-4">
-            {recentActivity.map((activity, index) => (
-              <div
-                key={index}
-                className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0"
-              >
-                <div>
-                  <span className="font-medium text-slate-800">
-                    {activity.user}
-                  </span>
-                  <span className="text-slate-500 text-sm">
-                    {" "}
-                    {activity.action}
-                  </span>
-                </div>
-                <span className="text-xs text-slate-400">{activity.time}</span>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
-
-      {/* High Risk Controls */}
-      <HighRiskControlList controls={getHighRiskControls()} />
     </div>
   );
 }
 
 // ============ INTERNAL EXPERT DASHBOARD ============
-function InternalExpertDashboard() {
-  const highRiskControls = getHighRiskControls();
-  const stats = {
-    totalControls: 93,
-    implemented: 12,
-    partial: 28,
-    notImplemented: 53,
-  };
-  const compliancePercentage = Math.round(
-    (stats.implemented / stats.totalControls) * 100,
-  );
+function InternalExpertDashboard({
+  controls,
+  assessmentControls,
+}: {
+  controls: TControl[];
+  assessmentControls: TAssessmentControl[];
+}) {
+  const stats = calculateStats(controls);
+  const compliancePercentage =
+    stats.total > 0 ? Math.round((stats.implemented / stats.total) * 100) : 0;
+
+  // Filter high risk (not implemented)
+  const highRiskList = controls
+    .filter((c) => c.status === ControlStatus.NOT_IMPLEMENTED)
+    .slice(0, 3)
+    .map((control) => {
+      // Find matching assessment control (domain)
+      const assessmentControl = assessmentControls.find(
+        (a) => a.id === control.assessmentControlId,
+      );
+      // Fallback if not found (should not happen with real data)
+      const safeAssessmentControl =
+        assessmentControl ||
+        ({
+          id: 0,
+          count: 0,
+          maxCount: 0,
+          type: "ORGANIZATION", // Default to prevent type errors
+          assessmentId: 0,
+          description: "Unknown Domain",
+        } as unknown as TAssessmentControl);
+
+      return { control, assessmentControl: safeAssessmentControl };
+    });
 
   return (
     <div className="flex flex-col min-h-screen py-8 px-8 lg:px-16 bg-slate-50/50 gap-6">
@@ -250,7 +258,7 @@ function InternalExpertDashboard() {
         />
         <DashboardCard
           topic="Controls Assessed"
-          description={`${stats.implemented + stats.partial} of ${stats.totalControls} controls reviewed`}
+          description={`${stats.implemented + stats.partial} of ${stats.total} controls reviewed`}
           Icon={LayoutDashboard}
         />
         <DashboardCard
@@ -261,57 +269,28 @@ function InternalExpertDashboard() {
       </div>
 
       {/* High Risk Controls */}
-      <HighRiskControlList controls={highRiskControls} />
+      {highRiskList.length > 0 ? (
+        <HighRiskControlList controls={highRiskList} />
+      ) : (
+        <div className="p-6 bg-white rounded-xl border border-slate-200">
+          <p className="text-slate-500 text-center">
+            No high risk controls found for this year.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
 
 // ============ EXTERNAL EXPERT DASHBOARD ============
-function ExternalExpertDashboard() {
-  const assignedCompanies = [
-    {
-      id: 1,
-      name: "Acme Corp",
-      pendingReviews: 5,
-      lastReview: "2 days ago",
-      progress: 65,
-    },
-    {
-      id: 2,
-      name: "TechStart Inc",
-      pendingReviews: 12,
-      lastReview: "1 week ago",
-      progress: 35,
-    },
-    {
-      id: 3,
-      name: "SecureData Ltd",
-      pendingReviews: 3,
-      lastReview: "Yesterday",
-      progress: 78,
-    },
-  ];
-
-  const recentReviews = [
-    {
-      control: "A.5.1",
-      company: "Acme Corp",
-      status: "approved",
-      date: "Yesterday",
-    },
-    {
-      control: "A.6.2",
-      company: "SecureData Ltd",
-      status: "approved",
-      date: "2 days ago",
-    },
-    {
-      control: "A.8.5",
-      company: "TechStart Inc",
-      status: "rejected",
-      date: "3 days ago",
-    },
-  ];
+function ExternalExpertDashboard({ companies }: { companies: any[] }) {
+  // Demo: Show all companies as "Assigned" since no assignment logic YES
+  const assigned = companies.map((c) => ({
+    ...c,
+    pendingReviews: 0, // No real review data
+    lastReview: "Never",
+    progress: 0, // Would need to fetch stats for each company
+  }));
 
   return (
     <div className="flex flex-col min-h-screen py-8 px-8 lg:px-16 bg-slate-50/50 gap-6">
@@ -326,22 +305,19 @@ function ExternalExpertDashboard() {
         <StatCard
           icon={Building2}
           label="Assigned Companies"
-          value={assignedCompanies.length}
+          value={assigned.length}
           color="blue"
         />
         <StatCard
           icon={Clock}
           label="Pending Reviews"
-          value={assignedCompanies.reduce(
-            (acc, c) => acc + c.pendingReviews,
-            0,
-          )}
+          value={0}
           color="yellow"
         />
         <StatCard
           icon={CheckCircle}
           label="Completed This Month"
-          value={15}
+          value={0}
           color="green"
         />
       </div>
@@ -349,68 +325,40 @@ function ExternalExpertDashboard() {
       {/* Assigned Companies */}
       <div className="bg-white rounded-xl p-6 border border-slate-200">
         <SectionHeader title="Assigned Companies" />
-        <div className="grid grid-cols-3 gap-4 mt-4">
-          {assignedCompanies.map((company) => (
-            <Link
-              key={company.id}
-              to="/assessment/overview"
-              className="p-4 border border-slate-200 rounded-xl hover:shadow-lg hover:border-main-blue/50 transition-all"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-slate-800">{company.name}</h3>
-                {company.pendingReviews > 0 && (
-                  <span className="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs font-bold rounded-full">
-                    {company.pendingReviews} pending
-                  </span>
-                )}
-              </div>
-              <div className="mb-2">
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-slate-500">Progress</span>
-                  <span className="font-medium text-slate-700">
-                    {company.progress}%
-                  </span>
+        {assigned.length > 0 ? (
+          <div className="grid grid-cols-3 gap-4 mt-4">
+            {assigned.map((company) => (
+              <Link
+                key={company.id}
+                to="/assessment/overview"
+                className="p-4 border border-slate-200 rounded-xl hover:shadow-lg hover:border-main-blue/50 transition-all"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-slate-800">
+                    {company.name}
+                  </h3>
                 </div>
-                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-main-blue rounded-full"
-                    style={{ width: `${company.progress}%` }}
-                  />
+                <div className="mb-2">
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-slate-500">Progress</span>
+                    <span className="font-medium text-slate-700">0%</span>
+                  </div>
+                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-main-blue rounded-full"
+                      style={{ width: "0%" }}
+                    />
+                  </div>
                 </div>
-              </div>
-              <p className="text-xs text-slate-400">
-                Last review: {company.lastReview}
-              </p>
-            </Link>
-          ))}
-        </div>
-      </div>
-
-      {/* Recent Reviews */}
-      <div className="bg-white rounded-xl p-6 border border-slate-200">
-        <SectionHeader title="Recent Reviews" />
-        <div className="flex flex-col gap-3 mt-4">
-          {recentReviews.map((review, index) => (
-            <div
-              key={index}
-              className="flex items-center justify-between py-3 border-b border-slate-100 last:border-0"
-            >
-              <div className="flex items-center gap-4">
-                <span className="px-2 py-1 bg-slate-100 text-slate-700 font-mono text-sm rounded">
-                  {review.control}
-                </span>
-                <span className="text-slate-600">{review.company}</span>
-              </div>
-              <div className="flex items-center gap-4">
-                <StatusBadge
-                  label={review.status === "approved" ? "Approved" : "Rejected"}
-                  variant={review.status === "approved" ? "success" : "error"}
-                />
-                <span className="text-xs text-slate-400">{review.date}</span>
-              </div>
-            </div>
-          ))}
-        </div>
+                <p className="text-xs text-slate-400">
+                  Last review: {company.lastReview}
+                </p>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <p className="text-slate-500 text-sm mt-4">No companies assigned.</p>
+        )}
       </div>
     </div>
   );

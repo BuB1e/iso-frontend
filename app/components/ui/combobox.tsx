@@ -1,10 +1,10 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { CheckIcon, ChevronsUpDownIcon } from "lucide-react"
+import * as React from "react";
+import { CheckIcon, ChevronsUpDownIcon } from "lucide-react";
 
-import { cn } from "~/lib/utils"
-import { Button } from "~/components/ui/button"
+import { cn } from "~/lib/utils";
+import { Button } from "~/components/ui/button";
 import {
   Command,
   CommandEmpty,
@@ -12,13 +12,13 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "~/components/ui/command"
+} from "~/components/ui/command";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "~/components/ui/popover"
-import { useYearStore } from "~/stores/yearStore"
+} from "~/components/ui/popover";
+import { useYearStore } from "~/stores/yearStore";
 
 const years = [
   {
@@ -41,13 +41,23 @@ const years = [
     value: 2026,
     label: "2026",
   },
-]
+];
 
 export function TopbarYearCombobox() {
+  const { currentYear, setCurrentYear, allYears } = useYearStore();
+  const [open, setOpen] = React.useState(false);
 
-  const currentYear = useYearStore((state) => state.currentYear);
-  const [open, setOpen] = React.useState(false)
-  const [value, setValue] = React.useState(currentYear)
+  // Use dynamic years from store, or fallback/default if empty
+  // Assuming allYears is populated by the app (e.g. dashboard loader)
+  // If empty, we might want to show at least current year or a default range
+  const displayYears =
+    allYears.length > 0
+      ? allYears.map((y) => ({ value: y, label: y.toString() }))
+      : [
+          { value: 2024, label: "2024" },
+          { value: 2025, label: "2025" },
+          { value: 2026, label: "2026" },
+        ];
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -58,8 +68,9 @@ export function TopbarYearCombobox() {
           aria-expanded={open}
           className="w-[200px] justify-between"
         >
-          {value
-            ? years.find((year) => year.value === value)?.label
+          {currentYear
+            ? displayYears.find((year) => year.value === currentYear)?.label ||
+              currentYear.toString()
             : "Select year..."}
           <ChevronsUpDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
@@ -70,20 +81,21 @@ export function TopbarYearCombobox() {
           <CommandList>
             <CommandEmpty>No year found.</CommandEmpty>
             <CommandGroup>
-              {years.map((year) => (
+              {displayYears.map((year) => (
                 <CommandItem
                   key={year.value}
                   value={year.value.toString()}
                   onSelect={(currentValue) => {
-                    const selectedYear = parseInt(currentValue, 10)
-                    setValue(selectedYear === value ? 0 : selectedYear)
-                    setOpen(false)
+                    // CommandItem value is always lowercase string?
+                    // Use the original year value from mapping
+                    setCurrentYear(year.value);
+                    setOpen(false);
                   }}
                 >
                   <CheckIcon
                     className={cn(
                       "mr-2 h-4 w-4",
-                      value === year.value ? "opacity-100" : "opacity-0"
+                      currentYear === year.value ? "opacity-100" : "opacity-0",
                     )}
                   />
                   {year.label}
@@ -94,5 +106,5 @@ export function TopbarYearCombobox() {
         </Command>
       </PopoverContent>
     </Popover>
-  )
+  );
 }

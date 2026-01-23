@@ -1,4 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import {
+  useLoaderData,
+  useActionData,
+  Form,
+  useNavigation,
+} from "react-router";
+import type { ActionFunctionArgs } from "react-router";
 import { Users, Edit, Trash2, AlertCircle, Building2 } from "lucide-react";
 import { PageHeader, SectionHeader } from "~/components/ui/pageHeader";
 import { DataTable, type Column } from "~/components/ui/dataTable";
@@ -11,101 +18,93 @@ import {
   ModalDescription,
   ModalFooter,
 } from "~/components/ui/modal";
+import { UserService } from "~/services/UserService";
+import { CompanyService } from "~/services/CompanyService";
+import type { UserResponseDto, CompanyResponseDto } from "~/dto";
+import { useUserFormStore } from "~/stores";
 import { UserRole } from "~/types";
 
-// User interface for admin management
-interface AdminUser {
-  [key: string]: unknown; // Index signature for DataTable compatibility
-  id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  role: UserRole;
-  companyId: number | null;
-  companyName: string | null;
-  emailVerified: boolean;
-  createdAt: string;
+// Extended interface for DataTable compatibility
+interface AdminUser extends UserResponseDto {
+  [key: string]: unknown;
+  companyName?: string | null;
 }
 
-// Mock data - users who have signed up
-const mockUsers: AdminUser[] = [
-  {
-    id: "1",
-    firstName: "John",
-    lastName: "Doe",
-    email: "john.doe@example.com",
-    role: UserRole.INTERNAL_EXPERT,
-    companyId: 1,
-    companyName: "Acme Corp",
-    emailVerified: true,
-    createdAt: "2025-10-15",
-  },
-  {
-    id: "2",
-    firstName: "Jane",
-    lastName: "Smith",
-    email: "jane.smith@auditor.com",
-    role: UserRole.EXTERNAL_EXPERT,
-    companyId: 3,
-    companyName: "Security Auditors Ltd",
-    emailVerified: true,
-    createdAt: "2025-11-01",
-  },
-  {
-    id: "3",
-    firstName: "Bob",
-    lastName: "Wilson",
-    email: "bob.wilson@example.com",
-    role: UserRole.INTERNAL_EXPERT,
-    companyId: null, // Unassigned
-    companyName: null,
-    emailVerified: true,
-    createdAt: "2025-12-10",
-  },
-  {
-    id: "4",
-    firstName: "Alice",
-    lastName: "Brown",
-    email: "alice.brown@gmail.com",
-    role: UserRole.INTERNAL_EXPERT,
-    companyId: null, // Unassigned
-    companyName: null,
-    emailVerified: false,
-    createdAt: "2025-12-18",
-  },
-  {
-    id: "5",
-    firstName: "Charlie",
-    lastName: "Davis",
-    email: "charlie@techstart.com",
-    role: UserRole.INTERNAL_EXPERT,
-    companyId: 2,
-    companyName: "TechStart Inc",
-    emailVerified: true,
-    createdAt: "2025-12-15",
-  },
-];
+// Loader - fetch users and companies
+export async function loader() {
+  const [users, companies] = await Promise.all([
+    UserService.getAllUser(),
+    CompanyService.getAllCompany(),
+  ]);
 
-// Mock companies for dropdown
-const mockCompanies = [
-  { id: 1, name: "Acme Corp" },
-  { id: 2, name: "TechStart Inc" },
-  { id: 3, name: "Security Auditors Ltd" },
-  { id: 4, name: "Audit Co" },
-];
+  // Enrich users with company names
+  const companyMap = new Map(companies.map((c) => [c.id, c.name]));
+  const enrichedUsers: AdminUser[] = (users || []).map((user) => ({
+    ...user,
+    companyName: user.companyId ? companyMap.get(user.companyId) || null : null,
+  }));
+
+  return { users: enrichedUsers, companies };
+}
+
+// Action - handle form submissions
+export async function action({ request }: ActionFunctionArgs) {
+  const formData = await request.formData();
+  const intent = formData.get("intent") as string;
+
+  try {
+    if (intent === "update") {
+      const result = await UserService.updateUserById({
+        id: formData.get("id") as string,
+        role: formData.get("role") as UserRole,
+        companyId: formData.get("companyId")
+          ? Number(formData.get("companyId"))
+          : undefined,
+      });
+      return { success: !!result, intent };
+    }
+
+    if (intent === "delete") {
+      const result = await UserService.deleteUserById(
+        formData.get("id") as string,
+      );
+      return { success: result, intent };
+    }
+
+    return { success: false, error: "Unknown intent" };
+  } catch (error) {
+    return { success: false, error: String(error) };
+  }
+}
 
 type FilterType = "all" | "unassigned" | "assigned";
 
 export default function AdminUsers() {
-  const [users, setUsers] = useState(mockUsers);
+  const { users, companies } = useLoaderData<typeof loader>();
+  const actionData = useActionData<typeof action>();
+  const navigation = useNavigation();
+  const isSubmitting = navigation.state === "submitting";
+
+  // Zustand form store
+  const { role, companyId, editingId, setField, startEdit, reset } =
+    useUserFormStore();
+
+  // Filter state
   const [filter, setFilter] = useState<FilterType>("all");
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
-  const [editForm, setEditForm] = useState({
-    role: UserRole.INTERNAL_EXPERT as UserRole,
-    companyId: null as number | null,
-  });
+
+  // Clear form after successful action
+  useEffect(() => {
+    if (actionData?.success) {
+      reset();
+    }
+  }, [actionData, reset]);
+
+  // Modal state
+  const isModalOpen = editingId !== null;
+
+  const openEditModal = (user: AdminUser) => {
+    startEdit(user.id, user.role, user.companyId || null);
+  };
 
   // Filter users
   const filteredUsers = users.filter((user) => {
@@ -118,73 +117,15 @@ export default function AdminUsers() {
   const unassignedCount = users.filter((u) => u.companyId === null).length;
   const assignedCount = users.filter((u) => u.companyId !== null).length;
 
-  const openEditModal = (user: AdminUser) => {
-    setSelectedUser(user);
-    setEditForm({
-      role: user.role,
-      companyId: user.companyId,
-    });
-    setIsEditModalOpen(true);
-  };
-
-  const openDeleteModal = (user: AdminUser) => {
-    setSelectedUser(user);
-    setIsDeleteModalOpen(true);
-  };
-
-  const handleSaveUser = () => {
-    if (!selectedUser) return;
-
-    // TODO: API call to update user
-    console.log("Updating user:", selectedUser.id, editForm);
-
-    // Update local state
-    setUsers(
-      users.map((u) =>
-        u.id === selectedUser.id
-          ? {
-              ...u,
-              role: editForm.role,
-              companyId: editForm.companyId,
-              companyName:
-                mockCompanies.find((c) => c.id === editForm.companyId)?.name ||
-                null,
-            }
-          : u,
-      ),
-    );
-
-    setIsEditModalOpen(false);
-    setSelectedUser(null);
-  };
-
-  const handleDeleteUser = () => {
-    if (!selectedUser) return;
-
-    // TODO: API call to delete user
-    console.log("Deleting user:", selectedUser.id);
-
-    setUsers(users.filter((u) => u.id !== selectedUser.id));
-    setIsDeleteModalOpen(false);
-    setSelectedUser(null);
-  };
-
   const columns: Column<AdminUser>[] = [
     {
       key: "name",
       header: "User",
       render: (user) => (
         <div className="flex flex-col">
-          <div className="flex items-center gap-2">
-            <span className="font-medium text-slate-800">
-              {user.firstName} {user.lastName}
-            </span>
-            {!user.emailVerified && (
-              <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-700 text-xs rounded">
-                Unverified
-              </span>
-            )}
-          </div>
+          <span className="font-medium text-slate-800">
+            {user.firstName} {user.lastName}
+          </span>
           <span className="text-xs text-slate-500">{user.email}</span>
         </div>
       ),
@@ -194,20 +135,14 @@ export default function AdminUsers() {
       header: "Role",
       render: (user) => {
         const roleConfig: Record<
-          UserRole,
+          string,
           { label: string; variant: BadgeVariant }
         > = {
-          [UserRole.ADMIN]: { label: "Admin", variant: "info" },
-          [UserRole.INTERNAL_EXPERT]: {
-            label: "Internal Expert",
-            variant: "default",
-          },
-          [UserRole.EXTERNAL_EXPERT]: {
-            label: "External Expert",
-            variant: "success",
-          },
+          ADMIN: { label: "Admin", variant: "info" },
+          INTERNAL_EXPERT: { label: "Internal Expert", variant: "default" },
+          EXTERNAL_EXPERT: { label: "External Expert", variant: "success" },
         };
-        const config = roleConfig[user.role];
+        const config = roleConfig[user.role] || roleConfig.INTERNAL_EXPERT;
         return <StatusBadge label={config.label} variant={config.variant} />;
       },
     },
@@ -230,6 +165,11 @@ export default function AdminUsers() {
     {
       key: "createdAt",
       header: "Registered",
+      render: (user) => (
+        <span className="text-sm text-slate-500">
+          {new Date(user.createdAt).toLocaleDateString()}
+        </span>
+      ),
     },
     {
       key: "actions",
@@ -239,17 +179,22 @@ export default function AdminUsers() {
           <button
             onClick={() => openEditModal(user)}
             className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-main-blue"
-            title="Edit user"
           >
             <Edit className="w-4 h-4" />
           </button>
-          <button
-            onClick={() => openDeleteModal(user)}
-            className="p-2 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-500"
-            title="Delete user"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
+          <Form method="post">
+            <input type="hidden" name="intent" value="delete" />
+            <input type="hidden" name="id" value={user.id} />
+            <button
+              type="submit"
+              className="p-2 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-500"
+              onClick={(e) => {
+                if (!confirm("Delete this user?")) e.preventDefault();
+              }}
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </Form>
         </div>
       ),
       className: "w-24",
@@ -282,25 +227,6 @@ export default function AdminUsers() {
         </div>
       </div>
 
-      {/* Filter Tabs */}
-      <div className="flex gap-2">
-        {(["all", "unassigned", "assigned"] as FilterType[]).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              filter === f
-                ? "bg-main-blue text-white"
-                : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
-            }`}
-          >
-            {f === "all" && `All (${users.length})`}
-            {f === "unassigned" && `Unassigned (${unassignedCount})`}
-            {f === "assigned" && `Assigned (${assignedCount})`}
-          </button>
-        ))}
-      </div>
-
       {/* Users Table */}
       <div className="bg-white rounded-xl p-6 border border-slate-200">
         <SectionHeader title="Registered Users" />
@@ -316,113 +242,84 @@ export default function AdminUsers() {
       </div>
 
       {/* Edit User Modal */}
-      <Modal open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+      <Modal open={isModalOpen} onOpenChange={(open) => !open && reset()}>
         <ModalContent size="md">
           <ModalHeader>
             <ModalTitle>Edit User</ModalTitle>
             <ModalDescription>
-              Assign company and role to{" "}
-              <strong>
-                {selectedUser?.firstName} {selectedUser?.lastName}
-              </strong>
+              Assign company and role to this user
             </ModalDescription>
           </ModalHeader>
 
-          <div className="flex flex-col gap-4 py-4">
-            {/* Role */}
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-slate-700">Role</label>
-              <select
-                value={editForm.role}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, role: e.target.value as UserRole })
-                }
-                className="px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-main-blue/20 focus:border-main-blue"
-              >
-                <option value={UserRole.INTERNAL_EXPERT}>
-                  Internal Expert
-                </option>
-                <option value={UserRole.EXTERNAL_EXPERT}>
-                  External Expert
-                </option>
-                <option value={UserRole.ADMIN}>Admin</option>
-              </select>
-            </div>
+          <Form method="post">
+            <input type="hidden" name="intent" value="update" />
+            <input type="hidden" name="id" value={editingId || ""} />
 
-            {/* Company */}
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-slate-700">
-                Assign Company
-              </label>
-              <select
-                value={editForm.companyId ?? ""}
-                onChange={(e) =>
-                  setEditForm({
-                    ...editForm,
-                    companyId: e.target.value ? Number(e.target.value) : null,
-                  })
-                }
-                className="px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-main-blue/20 focus:border-main-blue"
-              >
-                <option value="">-- No Company --</option>
-                {mockCompanies.map((company) => (
-                  <option key={company.id} value={company.id}>
-                    {company.name}
+            <div className="flex flex-col gap-4 py-4">
+              {/* Role */}
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-medium text-slate-700">
+                  Role
+                </label>
+                <select
+                  name="role"
+                  value={role}
+                  onChange={(e) => setField("role", e.target.value as UserRole)}
+                  className="px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-main-blue/20 focus:border-main-blue"
+                >
+                  <option value={UserRole.INTERNAL_EXPERT}>
+                    Internal Expert
                   </option>
-                ))}
-              </select>
-              <p className="text-xs text-slate-500">
-                Internal Experts belong to one company. External Experts audit
-                assigned companies.
-              </p>
+                  <option value={UserRole.EXTERNAL_EXPERT}>
+                    External Expert
+                  </option>
+                  <option value={UserRole.ADMIN}>Admin</option>
+                </select>
+              </div>
+
+              {/* Company */}
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-medium text-slate-700">
+                  Assign Company
+                </label>
+                <select
+                  name="companyId"
+                  value={companyId ?? ""}
+                  onChange={(e) =>
+                    setField(
+                      "companyId",
+                      e.target.value ? Number(e.target.value) : null,
+                    )
+                  }
+                  className="px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-main-blue/20 focus:border-main-blue"
+                >
+                  <option value="">-- No Company --</option>
+                  {companies.map((company: CompanyResponseDto) => (
+                    <option key={company.id} value={company.id}>
+                      {company.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-          </div>
 
-          <ModalFooter>
-            <button
-              onClick={() => setIsEditModalOpen(false)}
-              className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSaveUser}
-              className="px-4 py-2 bg-main-blue text-white rounded-lg hover:bg-main-blue/90"
-            >
-              Save Changes
-            </button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
-
-      {/* Delete Confirmation Modal */}
-      <Modal open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
-        <ModalContent size="sm">
-          <ModalHeader>
-            <ModalTitle>Delete User</ModalTitle>
-            <ModalDescription>
-              Are you sure you want to delete{" "}
-              <strong>
-                {selectedUser?.firstName} {selectedUser?.lastName}
-              </strong>
-              ? This action cannot be undone.
-            </ModalDescription>
-          </ModalHeader>
-
-          <ModalFooter>
-            <button
-              onClick={() => setIsDeleteModalOpen(false)}
-              className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleDeleteUser}
-              className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600"
-            >
-              Delete
-            </button>
-          </ModalFooter>
+            <ModalFooter>
+              <button
+                type="button"
+                onClick={reset}
+                className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="px-4 py-2 bg-main-blue text-white rounded-lg hover:bg-main-blue/90 disabled:opacity-50"
+              >
+                {isSubmitting ? "Saving..." : "Save Changes"}
+              </button>
+            </ModalFooter>
+          </Form>
         </ModalContent>
       </Modal>
     </div>

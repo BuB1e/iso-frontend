@@ -5,16 +5,16 @@ export enum UserRole {
   ADMIN = "ADMIN",
 }
 
-// Matches Prisma model: User
+// Matches Prisma model: User (and UserResponseDto)
 export interface TUser {
   id: string;
   firstName: string;
   lastName: string;
   email: string;
   role: UserRole;
-  emailVerified: boolean;
-  image?: string;
-  company_id?: number;
+  emailVerified?: boolean;
+  image?: string | null;
+  companyId?: number | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -49,20 +49,8 @@ export function canEditImplementation(role: UserRole): boolean {
   return role === UserRole.INTERNAL_EXPERT || role === UserRole.ADMIN;
 }
 
-// Check if user can submit reviews - DISABLED: No Review model in schema
+// Check if user can submit reviews
 export function canSubmitReview(role: UserRole): boolean {
   // Review functionality not available yet - no Review table in schema
   return false;
-}
-
-// Mock current user - TODO: Replace with auth context
-export function getMockCurrentUser(): TUser {
-  return {
-    id: "1",
-    firstName: "John",
-    lastName: "Doe",
-    email: "john.doe@example.com",
-    role: UserRole.INTERNAL_EXPERT, // Change to EXTERNAL_EXPERT to test review permissions
-    emailVerified: true,
-  };
 }

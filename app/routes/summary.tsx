@@ -1,81 +1,181 @@
-import { Printer, FileText, AlertTriangle, CheckCircle } from "lucide-react";
+import { useLoaderData } from "react-router";
+import { Printer } from "lucide-react";
+import {
+  ControlStatus,
+  ControlsType,
+  type TControl,
+  type TAssessmentControl,
+} from "~/types";
+import { IsoAssessmentService } from "~/services/IsoAssessmentService";
+import { ControlService } from "~/services/ControlService";
+import { AssessmentControlService } from "~/services/AssessmentControlService";
+import type { SummaryItemDto, DomainSummary } from "~/dto";
+import { useYearStore } from "~/stores/yearStore";
 import { useUserStore } from "~/stores/userStore";
 
-// Domain data interface
-interface DomainSummary {
-  code: string;
-  name: string;
-  description: string;
-  implemented: number;
-  total: number;
-}
-
-// Mock summary data
-const mockSummaryData = {
-  assessmentScope: "Q4 2025 ISO 27001 Audit",
-  organization: "Entire Organization",
-  author: "System Generated",
-  dateGenerated: new Date().toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  }),
-  executiveSummary:
-    "The organization has improved its compliance posture significantly since the last audit. Key controls in A.5 (Organizational) and A.8 (Technological) are effectively implemented. Focus is now needed on A.7 (Physical) controls for remote workers.",
-  overallScore: 35,
-  implemented: 29,
-  inProgress: 15,
-  notStarted: 49,
-  totalControls: 93,
-  domains: [
-    {
-      code: "A.5",
-      name: "Organizational Controls",
-      description: "Policies, roles, responsibilities and asset management",
-      implemented: 12,
-      total: 37,
-    },
-    {
-      code: "A.6",
-      name: "People Controls",
-      description: "HR security, awareness and training",
-      implemented: 3,
-      total: 8,
-    },
-    {
-      code: "A.7",
-      name: "Physical Controls",
-      description: "Physical security and equipment protection",
-      implemented: 5,
-      total: 14,
-    },
-    {
-      code: "A.8",
-      name: "Technological Controls",
-      description: "Access control, cryptography and operations",
-      implemented: 10,
-      total: 34,
-    },
-  ] as DomainSummary[],
-  findings: [
-    {
-      type: "observation",
-      title: "Physical Security",
-      description:
-        "Remote work policies for physical security (A.7) are drafted but not widely distributed. Recommended to schedule a training session.",
-    },
-    {
-      type: "strength",
-      title: "Access Control",
-      description:
-        "RBAC (A.8.3) is well implemented across all cloud infrastructure with 100% coverage.",
-    },
-  ],
+// Map backend type to display info
+const typeConfig: Record<
+  ControlsType,
+  { code: string; name: string; description: string }
+> = {
+  [ControlsType.ORGANIZATION]: {
+    code: "A.5",
+    name: "Organizational Controls",
+    description: "Policies, roles, responsibilities and asset management",
+  },
+  [ControlsType.PEOPLE]: {
+    code: "A.6",
+    name: "People Controls",
+    description: "HR security, awareness and training",
+  },
+  [ControlsType.PHYSICAL]: {
+    code: "A.7",
+    name: "Physical Controls",
+    description: "Physical security and equipment protection",
+  },
+  [ControlsType.TECHNOLOGICAL]: {
+    code: "A.8",
+    name: "Technological Controls",
+    description: "Access control, cryptography and operations",
+  },
 };
 
+// Process controls into domain summaries
+function processSummaryData(
+  controls: TControl[],
+  assessmentControls: TAssessmentControl[],
+): {
+  domains: DomainSummary[];
+  totals: {
+    implemented: number;
+    partially: number;
+    notImplemented: number;
+    total: number;
+  };
+} {
+  const domainMap = new Map<
+    ControlsType,
+    { notImplemented: number; partially: number; implemented: number }
+  >();
+
+  // Initialize all domain types
+  for (const type of Object.values(ControlsType) as ControlsType[]) {
+    domainMap.set(type, { notImplemented: 0, partially: 0, implemented: 0 });
+  }
+
+  // Aggregate counts from real controls
+  for (const control of controls) {
+    // Find type via assessmentControlId
+    const ac = assessmentControls.find(
+      (a) => a.id === control.assessmentControlId,
+    );
+    if (ac) {
+      const type = ac.type;
+      const existing = domainMap.get(type);
+      if (existing) {
+        if (control.status === ControlStatus.NOT_IMPLEMENTED) {
+          existing.notImplemented++;
+        } else if (control.status === ControlStatus.PARTIALLY) {
+          existing.partially++;
+        } else if (control.status === ControlStatus.IMPLEMENTED) {
+          existing.implemented++;
+        }
+      }
+    }
+  }
+
+  // Convert to DomainSummary array
+  const domains: DomainSummary[] = [];
+  let totalImplemented = 0;
+  let totalPartially = 0;
+  let totalNotImplemented = 0;
+
+  for (const [type, counts] of domainMap) {
+    const config = typeConfig[type];
+    const total = counts.notImplemented + counts.partially + counts.implemented;
+    const percentage =
+      total > 0 ? Math.round((counts.implemented / total) * 100) : 0;
+
+    totalImplemented += counts.implemented;
+    totalPartially += counts.partially;
+    totalNotImplemented += counts.notImplemented;
+
+    domains.push({
+      type,
+      ...config,
+      notImplemented: counts.notImplemented,
+      partially: counts.partially,
+      implemented: counts.implemented,
+      total,
+      percentage,
+    });
+  }
+
+  return {
+    domains,
+    totals: {
+      implemented: totalImplemented,
+      partially: totalPartially,
+      notImplemented: totalNotImplemented,
+      total: totalImplemented + totalPartially + totalNotImplemented,
+    },
+  };
+}
+
+// Loader - fetch all data
+export async function loader() {
+  const [controls, assessmentControls, isoAssessments] = await Promise.all([
+    ControlService.getAllControl(),
+    AssessmentControlService.getAllAssessmentControl(),
+    IsoAssessmentService.getAllIsoAssessment(),
+  ]);
+
+  return {
+    controls,
+    assessmentControls,
+    isoAssessments,
+    dateGenerated: new Date().toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    }),
+  };
+}
+
 export default function SummaryPage() {
+  const { controls, assessmentControls, isoAssessments, dateGenerated } =
+    useLoaderData<typeof loader>();
+  const { currentYear } = useYearStore();
   const currentUser = useUserStore((state) => state.currentUser);
-  const data = mockSummaryData;
+
+  // Filter by year AND user's company
+  const activeAssessments = isoAssessments.filter(
+    (a) =>
+      a.year === currentYear &&
+      (currentUser?.companyId ? a.companyId === currentUser.companyId : true),
+  );
+  const activeAssessmentIds = activeAssessments.map((a) => a.id);
+  const activeAssessmentControls = assessmentControls.filter((ac) =>
+    activeAssessmentIds.includes(ac.isoAssessmentId),
+  );
+  const activeAssessmentControlIds = activeAssessmentControls.map(
+    (ac) => ac.id,
+  );
+
+  const filteredControls = controls.filter((c) =>
+    activeAssessmentControlIds.includes(c.assessmentControlId),
+  );
+
+  // Process filtered data
+  const { domains, totals } = processSummaryData(
+    filteredControls,
+    activeAssessmentControls as unknown as TAssessmentControl[],
+  );
+
+  const overallPercentage =
+    totals.total > 0
+      ? Math.round((totals.implemented / totals.total) * 100)
+      : 0;
 
   const handlePrint = () => {
     window.print();
@@ -113,7 +213,7 @@ export default function SummaryPage() {
                 <div className="text-right">
                   <p className="text-xs text-slate-400">Date Generated</p>
                   <p className="text-sm font-medium text-slate-700">
-                    {data.dateGenerated}
+                    {dateGenerated}
                   </p>
                 </div>
               </div>
@@ -124,78 +224,56 @@ export default function SummaryPage() {
                     Assessment Scope
                   </p>
                   <p className="font-medium text-slate-800">
-                    {data.assessmentScope}
+                    {currentYear} ISO 27001 Audit
                   </p>
-                  <p className="text-sm text-main-blue">{data.organization}</p>
+                  <p className="text-sm text-main-blue">Entire Organization</p>
                 </div>
                 <div>
                   <p className="text-xs text-slate-400 uppercase tracking-wide">
                     Author
                   </p>
-                  <p className="font-medium text-slate-800">{data.author}</p>
+                  <p className="font-medium text-slate-800">System Generated</p>
                 </div>
               </div>
             </header>
 
-            {/* 1. Executive Summary */}
-            <section>
-              <h2 className="text-lg font-bold text-slate-800 mb-3">
-                1. Executive Summary
-              </h2>
-              <p className="text-slate-600 leading-relaxed">
-                {data.executiveSummary}
-              </p>
-            </section>
-
-            {/* 2. Compliance Overview */}
+            {/* 1. Compliance Overview */}
             <section>
               <h2 className="text-lg font-bold text-slate-800 mb-4">
-                2. Compliance Overview
+                1. Compliance Overview
               </h2>
               <div className="grid grid-cols-4 gap-4">
                 <StatCard
                   label="Overall Score"
-                  value={`${data.overallScore}%`}
+                  value={`${overallPercentage}%`}
                   color="blue"
                 />
                 <StatCard
                   label="Implemented"
-                  value={data.implemented.toString()}
+                  value={totals.implemented.toString()}
                   color="green"
                 />
                 <StatCard
                   label="In Progress"
-                  value={data.inProgress.toString()}
+                  value={totals.partially.toString()}
                   color="yellow"
                 />
                 <StatCard
                   label="Not Started"
-                  value={data.notStarted.toString()}
+                  value={totals.notImplemented.toString()}
                   color="gray"
                 />
               </div>
             </section>
 
-            {/* 3. Domain Analysis */}
+            {/* 2. Domain Analysis */}
             <section>
               <h2 className="text-lg font-bold text-slate-800 mb-4">
-                3. Domain Analysis
+                2. Domain Analysis
               </h2>
               <div className="space-y-5">
-                {data.domains.map((domain) => (
-                  <DomainCard key={domain.code} domain={domain} />
-                ))}
-              </div>
-            </section>
-
-            {/* 4. Key Findings & Recommendations */}
-            <section>
-              <h2 className="text-lg font-bold text-slate-800 mb-4">
-                4. Key Findings & Recommendations
-              </h2>
-              <div className="space-y-3">
-                {data.findings.map((finding, index) => (
-                  <FindingCard key={index} finding={finding} />
+                {domains.map((domain) => (
+                  <DomainCard key={domain.type} domain={domain} />
                 ))}
               </div>
             </section>
@@ -250,8 +328,6 @@ function StatCard({
 }
 
 function DomainCard({ domain }: { domain: DomainSummary }) {
-  const percentage = Math.round((domain.implemented / domain.total) * 100);
-
   return (
     <div className="border-b border-slate-100 pb-4 last:border-0">
       <div className="flex justify-between items-start mb-2">
@@ -262,7 +338,7 @@ function DomainCard({ domain }: { domain: DomainSummary }) {
           <p className="text-sm text-slate-500">{domain.description}</p>
         </div>
         <span className="text-sm font-medium text-main-blue">
-          {percentage}% Compliant
+          {domain.percentage}% Compliant
         </span>
       </div>
 
@@ -270,51 +346,11 @@ function DomainCard({ domain }: { domain: DomainSummary }) {
       <div className="h-2 bg-slate-100 rounded-full overflow-hidden mt-2">
         <div
           className="h-full bg-main-blue rounded-full transition-all"
-          style={{ width: `${percentage}%` }}
+          style={{ width: `${domain.percentage}%` }}
         />
       </div>
       <p className="text-xs text-slate-400 mt-1">
         {domain.implemented} / {domain.total} Controls Authorized
-      </p>
-    </div>
-  );
-}
-
-function FindingCard({
-  finding,
-}: {
-  finding: { type: string; title: string; description: string };
-}) {
-  const isObservation = finding.type === "observation";
-
-  return (
-    <div
-      className={`p-4 rounded-lg border-l-4 ${
-        isObservation
-          ? "bg-yellow-50 border-l-yellow-400"
-          : "bg-green-50 border-l-green-400"
-      }`}
-    >
-      <div className="flex items-center gap-2 mb-1">
-        {isObservation ? (
-          <AlertTriangle className="w-4 h-4 text-yellow-600" />
-        ) : (
-          <CheckCircle className="w-4 h-4 text-green-600" />
-        )}
-        <span
-          className={`text-sm font-semibold ${
-            isObservation ? "text-yellow-800" : "text-green-800"
-          }`}
-        >
-          {isObservation ? "Observation" : "Strength"}: {finding.title}
-        </span>
-      </div>
-      <p
-        className={`text-sm ${
-          isObservation ? "text-yellow-700" : "text-green-700"
-        }`}
-      >
-        {finding.description}
       </p>
     </div>
   );

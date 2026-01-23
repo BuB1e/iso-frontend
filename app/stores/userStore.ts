@@ -1,82 +1,57 @@
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
-import { UserRole, type TUser } from "~/types";
+import {
+  type TUser,
+  UserRole,
+  canEditImplementation,
+  canSubmitReview,
+} from "~/types/TUser";
 
-export interface UserStore {
+type UserStore = {
+  users: TUser[];
   currentUser: TUser | null;
-  isAuthenticated: boolean;
-  setCurrentUser: (user: TUser | null) => void;
   setRole: (role: UserRole) => void;
+  setUsers: (users: TUser[]) => void;
+  setCurrentUser: (user: TUser) => void;
   logout: () => void;
-}
-
-// Mock users for testing different roles
-export const mockUsers: Record<UserRole, TUser> = {
-  [UserRole.ADMIN]: {
-    id: "admin-1",
-    firstName: "Admin",
-    lastName: "User",
-    email: "admin@company.com",
-    role: UserRole.ADMIN,
-    emailVerified: true,
-    company_id: 1,
-  },
-  [UserRole.INTERNAL_EXPERT]: {
-    id: "internal-1",
-    firstName: "John",
-    lastName: "Doe",
-    email: "john.doe@company.com",
-    role: UserRole.INTERNAL_EXPERT,
-    emailVerified: true,
-    company_id: 1,
-  },
-  [UserRole.EXTERNAL_EXPERT]: {
-    id: "external-1",
-    firstName: "Jane",
-    lastName: "Smith",
-    email: "jane.smith@auditor.com",
-    role: UserRole.EXTERNAL_EXPERT,
-    emailVerified: true,
-  },
 };
 
-export const useUserStore = create<UserStore>()(
-  persist(
-    (set) => ({
-      currentUser: mockUsers[UserRole.INTERNAL_EXPERT], // Default to internal expert
-      isAuthenticated: true,
+export const useUserStore = create<UserStore>((set, get) => ({
+  users: [],
+  currentUser: null,
+  setUsers: (users) => {
+    // If setting users and current is null, optionally set default?
+    // For now just set users.
+    set({ users });
+    // Auto-select first user if none selected?
+    if (!get().currentUser && users.length > 0) {
+      // Prefer Internal Expert or Admin?
+      const defaultUser =
+        users.find((u) => u.role === UserRole.INTERNAL_EXPERT) || users[0];
+      set({ currentUser: defaultUser });
+    }
+  },
+  setCurrentUser: (user) => set({ currentUser: user }),
+  logout: () => set({ currentUser: null }),
+  setRole: (role) => {
+    // Find user with this role from users array
+    const user = get().users.find((u) => u.role === role);
+    if (user) {
+      set({ currentUser: user });
+    } else {
+      console.warn(`No user found with role ${role}`);
+    }
+  },
+}));
 
-      setCurrentUser: (user) =>
-        set({ currentUser: user, isAuthenticated: !!user }),
+// Helper hooks for permissions
+export const useCanEditImplementation = () => {
+  const currentUser = useUserStore((state) => state.currentUser);
+  if (!currentUser) return false;
+  return canEditImplementation(currentUser.role);
+};
 
-      setRole: (role) => set({ currentUser: mockUsers[role] }),
-
-      logout: () => set({ currentUser: null, isAuthenticated: false }),
-    }),
-    {
-      name: "user-store",
-      storage: createJSONStorage(() => localStorage),
-    },
-  ),
-);
-
-// Helper hooks for permission checks
-export function useCanEditImplementation(): boolean {
-  const role = useUserStore((state) => state.currentUser?.role);
-  return role === UserRole.ADMIN || role === UserRole.INTERNAL_EXPERT;
-}
-
-export function useCanSubmitReview(): boolean {
-  const role = useUserStore((state) => state.currentUser?.role);
-  return role === UserRole.ADMIN || role === UserRole.EXTERNAL_EXPERT;
-}
-
-export function useCanManageUsers(): boolean {
-  const role = useUserStore((state) => state.currentUser?.role);
-  return role === UserRole.ADMIN;
-}
-
-export function useCanManageCompanies(): boolean {
-  const role = useUserStore((state) => state.currentUser?.role);
-  return role === UserRole.ADMIN;
-}
+export const useCanSubmitReview = () => {
+  const currentUser = useUserStore((state) => state.currentUser);
+  if (!currentUser) return false;
+  return canSubmitReview(currentUser.role);
+};
