@@ -18,8 +18,7 @@ import {
   ModalDescription,
   ModalFooter,
 } from "~/components/ui/modal";
-import { UserService } from "~/services/UserService";
-import { CompanyService } from "~/services/CompanyService";
+import { UserService, CompanyService } from "~/services";
 import type { UserResponseDto, CompanyResponseDto } from "~/dto";
 import { useUserFormStore, useUserStore } from "~/stores";
 import { UserRole } from "~/types";

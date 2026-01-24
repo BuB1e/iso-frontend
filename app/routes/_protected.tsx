@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { authClient } from "~/lib/auth-client";
 import { Loader2 } from "lucide-react";
 import { useUserStore } from "~/stores/userStore";
-import { UserService } from "~/services/UserService";
+import { UserService } from "~/services";
 
 export default function ProtectedLayout() {
   const { data: session, isPending, error } = authClient.useSession();

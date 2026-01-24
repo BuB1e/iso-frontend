@@ -9,9 +9,11 @@ import {
   controlsTypeNameMap,
   UserRole,
 } from "~/types";
-import { ControlService } from "~/services/ControlService";
-import { AssessmentControlService } from "~/services/AssessmentControlService";
-import { IsoAssessmentService } from "~/services/IsoAssessmentService";
+import {
+  ControlService,
+  AssessmentControlService,
+  IsoAssessmentService,
+} from "~/services";
 import type { ControlResponseDto } from "~/dto";
 import { useYearStore } from "~/stores/yearStore";
 import { useUserStore } from "~/stores/userStore";
@@ -99,10 +101,15 @@ export default function DomainDetail() {
     (ac) => ac.id,
   );
 
-  // 3. Filter controls linked to active assessment controls
-  const filteredControls = controls.filter((c) =>
-    activeAssessmentControlIds.includes(c.assessmentControlId),
-  );
+  // 3. Filter controls linked to active assessment controls AND sort by code (natural sort)
+  const filteredControls = controls
+    .filter((c) => activeAssessmentControlIds.includes(c.assessmentControlId))
+    .sort((a, b) =>
+      a.code.localeCompare(b.code, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      }),
+    );
 
   const domainName = controlsTypeNameMap[domainType as ControlsType];
   const domainNum = controlsTypeDomainMap[domainType as ControlsType];

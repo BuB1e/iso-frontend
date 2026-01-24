@@ -3,7 +3,7 @@ import { useActionData, Form, useNavigation } from "react-router";
 import type { ActionFunctionArgs } from "react-router";
 import { Settings, User, Save, Camera } from "lucide-react";
 import { PageHeader, SectionHeader } from "~/components/ui/pageHeader";
-import { UserService } from "~/services/UserService";
+import { UserService } from "~/services";
 import { useUserStore } from "~/stores/userStore";
 import { useProfileFormStore } from "~/stores";
 import { userRoleConfig, UserRole } from "~/types";

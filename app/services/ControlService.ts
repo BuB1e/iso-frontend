@@ -65,4 +65,18 @@ export class ControlService {
       return null;
     }
   }
+
+  public static async suggestControlById(
+    id: number,
+  ): Promise<SuggestionResponseDto | null> {
+    try {
+      // Empty body as per requirement, valid PUT. Sending null to avoid sending "{}"
+      const response = await axios.put(`${this.API_URL}/suggest/${id}`, null);
+      const data: SuggestionResponseDto = await response.data;
+      return data;
+    } catch (error) {
+      console.error("Error :", error);
+      return null;
+    }
+  }
 }

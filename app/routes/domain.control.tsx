@@ -4,6 +4,7 @@ import {
   useActionData,
   useSubmit,
   useNavigation,
+  useFetcher,
   Form,
   Link,
   useParams,
@@ -45,11 +46,13 @@ import {
 } from "~/stores/userStore";
 import { useAdminStore } from "~/stores/adminStore";
 import { useYearStore } from "~/stores/yearStore";
-import { ControlService } from "~/services/ControlService";
-import { EvidenceService } from "~/services/EvidenceService";
-import { SuggestionService } from "~/services/SuggestionService";
-import { AssessmentControlService } from "~/services/AssessmentControlService";
-import { IsoAssessmentService } from "~/services/IsoAssessmentService";
+import {
+  ControlService,
+  EvidenceService,
+  SuggestionService,
+  AssessmentControlService,
+  IsoAssessmentService,
+} from "~/services";
 import type {
   EvidenceResponseDto,
   SuggestionResponseDto,
@@ -154,30 +157,37 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   if (intent === "analyze") {
-    // Construct request for AI
-    const controlCode = formData.get("controlCode") as string;
-    const name = formData.get("name") as string;
-    const description = formData.get("description") as string;
-    const guidance = formData.get("guidance") as string;
-    const status = formData.get("status") as string;
+    const status = formData.get("status") as ControlStatus;
     const currentPractice = formData.get("currentPractice") as string;
     const evidenceDescription = formData.get("evidenceDescription") as string;
-    const userContext = formData.get("context") as string;
+    const context = formData.get("context") as string;
 
-    const req: LlmSuggestRequest = {
+    // 1. Save Changes
+    await ControlService.updateControlById({
       id: controlId,
-      controlCode,
-      title: name,
-      description,
-      guidance,
-      status, // string in DTO
+      status,
       currentPractice,
       evidenceDescription,
-      userContext,
-    };
+      userContext: context, // Ensure field name matches DTO
+    });
 
-    const result = await ControlService.suggestControl(req);
-    return { success: !!result, intent, message: "Analysis generated" };
+    // 2. Trigger Analysis using ID (Backend reads updated data)
+    const result = await ControlService.suggestControlById(controlId);
+
+    if (!result) {
+      return {
+        success: false,
+        intent,
+        message: "Analysis failed. Check server logs.",
+      };
+    }
+
+    return {
+      success: true,
+      intent,
+      message: "Analysis generated",
+      suggestion: result,
+    };
   }
 
   if (intent === "upload") {
@@ -219,6 +229,9 @@ export default function DomainControl() {
   const submit = useSubmit();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
+  const suggestionFetcher = useFetcher<{
+    suggestion: SuggestionResponseDto | null;
+  }>();
 
   const { currentYear } = useYearStore();
   const params = useParams();
@@ -293,18 +306,42 @@ export default function DomainControl() {
   const suggestionEntry = suggestions.find((s) => s.controlId === control.id);
   const suggestion = suggestionEntry?.suggestion || null;
 
+  // Determine effective suggestion (Action > Fetcher > Loader)
+  // Check if actionData has suggestion AND it matches current control (to avoid stale data from prev action if we didn't nav away? unlikely but safe)
+  const actionSuggestion = (actionData as any)?.suggestion;
+  const activeSuggestion =
+    (actionSuggestion && actionSuggestion.controlId === control.id
+      ? actionSuggestion
+      : null) ||
+    suggestionFetcher.data?.suggestion ||
+    suggestion;
+
   // Parse AI Analysis
   let aiAnalysis: AIAnalysis | null = null;
-  if (suggestion && suggestion.content) {
+  let rawAnalysis: string | null = null;
+
+  if (activeSuggestion && activeSuggestion.content) {
     try {
-      aiAnalysis = JSON.parse(suggestion.content);
+      aiAnalysis = JSON.parse(activeSuggestion.content);
     } catch (e) {
-      console.error("Failed to parse AI analysis", e);
+      rawAnalysis = activeSuggestion.content;
     }
   }
 
   const [activeTab, setActiveTab] = useState<Tab>(Tab.Implementation);
   const [isDirty, setIsDirty] = useState(false);
+
+  // Fetch suggestion when AI Analysis tab is opened
+  useEffect(() => {
+    if (
+      activeTab === Tab.AIAnalysis &&
+      suggestionFetcher.state === "idle" &&
+      !suggestionFetcher.data &&
+      control?.id
+    ) {
+      suggestionFetcher.load(`/api/suggestion/${control.id}`);
+    }
+  }, [activeTab, control.id, suggestionFetcher]);
 
   // Local state for form fields to support "dirty" check
   const [status, setStatus] = useState(control.status);
@@ -621,7 +658,7 @@ export default function DomainControl() {
                     </button>
                   )}
                 </div>
-{/* Need to make this work */}
+
                 {aiAnalysis ? (
                   <div className="space-y-6 animate-in fade-in duration-500">
                     {/* Score */}
@@ -701,6 +738,12 @@ export default function DomainControl() {
                           </li>
                         ))}
                       </ul>
+                    </div>
+                  </div>
+                ) : rawAnalysis ? (
+                  <div className="space-y-6 animate-in fade-in duration-500">
+                    <div className="p-6 bg-slate-50 rounded-xl border border-slate-200 prose prose-purple max-w-none text-sm leading-relaxed whitespace-pre-wrap">
+                      {rawAnalysis}
                     </div>
                   </div>
                 ) : (

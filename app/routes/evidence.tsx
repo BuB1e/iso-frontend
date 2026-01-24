@@ -24,10 +24,12 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { EvidenceService } from "~/services/EvidenceService";
-import { ControlService } from "~/services/ControlService";
-import { AssessmentControlService } from "~/services/AssessmentControlService";
-import { IsoAssessmentService } from "~/services/IsoAssessmentService";
+import {
+  EvidenceService,
+  ControlService,
+  AssessmentControlService,
+  IsoAssessmentService,
+} from "~/services";
 import type { EvidenceResponseDto } from "~/dto";
 import { useUserStore } from "~/stores/userStore";
 import { useAdminStore } from "~/stores/adminStore";

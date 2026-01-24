@@ -34,11 +34,13 @@ import {
 import { useUserStore } from "~/stores/userStore";
 import { useAdminStore } from "~/stores/adminStore";
 import { useYearStore } from "~/stores/yearStore";
-import { CompanyService } from "~/services/CompanyService";
-import { UserService } from "~/services/UserService";
-import { IsoAssessmentService } from "~/services/IsoAssessmentService";
-import { ControlService } from "~/services/ControlService";
-import { AssessmentControlService } from "~/services/AssessmentControlService";
+import {
+  CompanyService,
+  UserService,
+  IsoAssessmentService,
+  ControlService,
+  AssessmentControlService,
+} from "~/services";
 
 // Helper to calculate compliance stats
 function calculateStats(controls: TControl[]) {

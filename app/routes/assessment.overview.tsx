@@ -1,9 +1,11 @@
 import { useLoaderData } from "react-router";
 import { Domains, type TDomain, ControlStatus, UserRole } from "~/types";
 import { DomainCard, type DomainStats } from "~/components/ui/domainCard";
-import { ControlService } from "~/services/ControlService";
-import { AssessmentControlService } from "~/services/AssessmentControlService";
-import { IsoAssessmentService } from "~/services/IsoAssessmentService";
+import {
+  ControlService,
+  AssessmentControlService,
+  IsoAssessmentService,
+} from "~/services";
 import { useYearStore } from "~/stores/yearStore";
 import { useUserStore } from "~/stores/userStore";
 import { useAdminStore } from "~/stores/adminStore";

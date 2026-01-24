@@ -17,7 +17,7 @@ import {
   ModalDescription,
   ModalFooter,
 } from "~/components/ui/modal";
-import { CompanyService } from "~/services/CompanyService";
+import { CompanyService } from "~/services";
 import type { CompanyResponseDto } from "~/dto";
 import { useCompanyFormStore } from "~/stores";
 

@@ -29,10 +29,21 @@ export class SuggestionService {
   ): Promise<SuggestionResponseDto | null> {
     try {
       const response = await axios.get(`${this.API_URL}/control/${controlId}`);
-      const data: SuggestionResponseDto = await response.data;
-      return data;
-    } catch (error) {
-      console.error("Error :", error);
+      const data: any = await response.data;
+      console.log(
+        `[SuggestionService] Control ${controlId} data:`,
+        JSON.stringify(data, null, 2),
+      );
+      if (Array.isArray(data)) {
+        return data[0] || null;
+      }
+      return data as SuggestionResponseDto;
+    } catch (error: any) {
+      if (axios.isAxiosError(error) && error.response?.status === 404) {
+        // Expected if no suggestion exists
+        return null;
+      }
+      console.error("Error fetching suggestion:", error.message || error);
       return null;
     }
   }

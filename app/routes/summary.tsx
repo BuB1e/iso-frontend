@@ -7,9 +7,7 @@ import {
   type TAssessmentControl,
   UserRole,
 } from "~/types";
-import { IsoAssessmentService } from "~/services/IsoAssessmentService";
-import { ControlService } from "~/services/ControlService";
-import { AssessmentControlService } from "~/services/AssessmentControlService";
+import { IsoAssessmentService, ControlService, AssessmentControlService } from "~/services";
 import type { SummaryItemDto, DomainSummary } from "~/dto";
 import { useYearStore } from "~/stores/yearStore";
 import { useUserStore } from "~/stores/userStore";

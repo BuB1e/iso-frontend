@@ -9,6 +9,7 @@ export default [
   index("routes/home.tsx"),
   route("login", "routes/login.tsx"),
   route("register", "routes/register.tsx"),
+  route("api/suggestion/:controlId", "routes/api.suggestion.$controlId.ts"),
 
   // Protect all app routes
   layout("routes/_protected.tsx", [
