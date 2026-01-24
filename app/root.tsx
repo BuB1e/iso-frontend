@@ -70,30 +70,73 @@ export default function App() {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  let message = "Oops!";
-  let details = "An unexpected error occurred.";
+  let statusCode = "Error";
+  let title = "Something went wrong";
+  let description = "An unexpected error occurred. Please try again.";
   let stack: string | undefined;
 
   if (isRouteErrorResponse(error)) {
-    message = error.status === 404 ? "404" : "Error";
-    details =
-      error.status === 404
-        ? "The requested page could not be found."
-        : error.statusText || details;
+    statusCode = String(error.status);
+    if (error.status === 404) {
+      title = "Page not found";
+      description =
+        "The page you're looking for doesn't exist or has been moved.";
+    } else if (error.status === 403) {
+      title = "Access denied";
+      description = "You don't have permission to view this page.";
+    } else if (error.status === 500) {
+      title = "Server error";
+      description = "Our servers are having trouble. Please try again later.";
+    } else {
+      description = error.statusText || description;
+    }
   } else if (import.meta.env.DEV && error && error instanceof Error) {
-    details = error.message;
+    description = error.message;
     stack = error.stack;
   }
 
   return (
-    <main className="pt-16 p-4 container mx-auto">
-      <h1>{message}</h1>
-      <p>{details}</p>
-      {stack && (
-        <pre className="w-full p-4 overflow-x-auto">
-          <code>{stack}</code>
-        </pre>
-      )}
+    <main className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-white rounded-xl shadow-lg border border-slate-200 p-8 text-center">
+        {/* Status Code Badge */}
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-4">
+          <span className="text-2xl font-bold text-red-600">{statusCode}</span>
+        </div>
+
+        {/* Title */}
+        <h1 className="text-2xl font-bold text-slate-900 mb-2">{title}</h1>
+
+        {/* Description */}
+        <p className="text-slate-600 mb-6">{description}</p>
+
+        {/* Action Buttons */}
+        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          <a
+            href="/"
+            className="inline-flex items-center justify-center px-4 py-2 bg-main-blue text-white rounded-lg font-medium hover:bg-main-blue/90 transition-colors"
+          >
+            ← Go Home
+          </a>
+          <button
+            onClick={() => window.location.reload()}
+            className="inline-flex items-center justify-center px-4 py-2 border border-slate-200 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors"
+          >
+            ↻ Try Again
+          </button>
+        </div>
+
+        {/* Dev Stack Trace */}
+        {stack && (
+          <details className="mt-6 text-left">
+            <summary className="text-sm text-slate-500 cursor-pointer hover:text-slate-700">
+              Technical details (dev only)
+            </summary>
+            <pre className="mt-2 p-3 bg-slate-100 rounded-lg overflow-x-auto text-xs text-slate-700">
+              <code>{stack}</code>
+            </pre>
+          </details>
+        )}
+      </div>
     </main>
   );
 }
