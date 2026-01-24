@@ -41,6 +41,11 @@ import {
   ControlService,
   AssessmentControlService,
 } from "~/services";
+import {
+  DonutChart,
+  DonutLegend,
+  DomainProgress,
+} from "~/components/ui/charts";
 
 // Helper to calculate compliance stats
 function calculateStats(controls: TControl[]) {
@@ -55,6 +60,37 @@ function calculateStats(controls: TControl[]) {
     (c) => c.status === ControlStatus.NOT_IMPLEMENTED,
   ).length;
   return { total, implemented, partial, notImplemented };
+}
+
+// Helper to calculate per-domain stats
+function calculateDomainStats(
+  controls: TControl[],
+  assessmentControls: TAssessmentControl[],
+) {
+  // Domain configuration
+  const domainConfig = [
+    { code: "A.5", name: "Organizational", color: "#3b82f6" },
+    { code: "A.6", name: "People", color: "#10b981" },
+    { code: "A.7", name: "Physical", color: "#f59e0b" },
+    { code: "A.8", name: "Technological", color: "#8b5cf6" },
+  ];
+
+  return domainConfig.map((domain) => {
+    // Find controls matching this domain code
+    const domainControls = controls.filter((c) =>
+      c.code.startsWith(domain.code),
+    );
+    const implemented = domainControls.filter(
+      (c) => c.status === ControlStatus.IMPLEMENTED,
+    ).length;
+    const total = domainControls.length;
+
+    return {
+      ...domain,
+      implemented,
+      total,
+    };
+  });
 }
 
 // Loader - fetch all data for dashboards
@@ -298,8 +334,16 @@ function InternalExpertDashboard({
   hideHeader?: boolean;
 }) {
   const stats = calculateStats(controls);
+  const domainStats = calculateDomainStats(controls, assessmentControls);
   const compliancePercentage =
     stats.total > 0 ? Math.round((stats.implemented / stats.total) * 100) : 0;
+
+  // Donut chart data
+  const donutSegments = [
+    { value: stats.implemented, color: "#10b981", label: "Implemented" },
+    { value: stats.partial, color: "#f59e0b", label: "Partially" },
+    { value: stats.notImplemented, color: "#ef4444", label: "Not Implemented" },
+  ];
 
   // Filter high risk (not implemented)
   const highRiskList = controls
@@ -354,6 +398,34 @@ function InternalExpertDashboard({
           description={`${stats.notImplemented} controls require implementation`}
           Icon={AlertCircle}
         />
+      </div>
+
+      {/* Analytics Section */}
+      <div className="grid grid-cols-2 gap-6">
+        {/* Compliance Donut Chart */}
+        <div className="bg-white rounded-xl p-6 border border-slate-200">
+          <h3 className="text-lg font-semibold text-slate-800 mb-4">
+            Compliance Breakdown
+          </h3>
+          <div className="flex items-center justify-between">
+            <DonutChart
+              segments={donutSegments}
+              centerLabel="Compliant"
+              size={160}
+              strokeWidth={20}
+              animated
+            />
+            <DonutLegend items={donutSegments} />
+          </div>
+        </div>
+
+        {/* Domain Progress */}
+        <div className="bg-white rounded-xl p-6 border border-slate-200">
+          <h3 className="text-lg font-semibold text-slate-800 mb-4">
+            Domain Compliance
+          </h3>
+          <DomainProgress domains={domainStats} animated />
+        </div>
       </div>
 
       {/* High Risk Controls */}
