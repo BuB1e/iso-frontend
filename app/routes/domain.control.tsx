@@ -43,6 +43,7 @@ import {
   useCanEditImplementation,
   useCanSubmitReview,
 } from "~/stores/userStore";
+import { useAdminStore } from "~/stores/adminStore";
 import { useYearStore } from "~/stores/yearStore";
 import { ControlService } from "~/services/ControlService";
 import { EvidenceService } from "~/services/EvidenceService";
@@ -239,12 +240,23 @@ export default function DomainControl() {
     }
   };
 
+  // Determine effective company filter
+  const { selectedCompanyId } = useAdminStore();
+  const targetCompanyId =
+    currentUser?.role === UserRole.ADMIN
+      ? selectedCompanyId
+      : currentUser?.companyId;
+
   // Determine active control based on current year AND user's company
-  const activeAssessments = isoAssessments.filter(
-    (a) =>
-      a.year === currentYear &&
-      (currentUser?.companyId ? a.companyId === currentUser.companyId : true),
-  );
+  const activeAssessments = isoAssessments.filter((a) => {
+    if (a.year !== currentYear) return false;
+
+    // If no target company (Global Admin View), show all
+    if (!targetCompanyId) return true;
+
+    // Otherwise, filter by specific company
+    return a.companyId === targetCompanyId;
+  });
   const activeAssessmentIds = activeAssessments.map((a) => a.id);
   const activeAssessmentControls = assessmentControls.filter((ac) =>
     activeAssessmentIds.includes(ac.isoAssessmentId),
@@ -387,7 +399,7 @@ export default function DomainControl() {
           Back to Domain
         </Link>
         <PageHeader
-          title={`${control.code} ${control.name}`}
+          title={`${control.code} ${control.name} (ID: ${control.id})`}
           description={control.description}
           icon={FileText}
         >
@@ -433,22 +445,24 @@ export default function DomainControl() {
         <div className="lg:col-span-2 flex flex-col gap-6">
           {/* Tabs */}
           <div className="flex border-b border-slate-200">
-            {Object.values(Tab).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-6 py-3 text-sm font-medium transition-colors relative ${
-                  activeTab === tab
-                    ? "text-main-blue"
-                    : "text-slate-500 hover:text-slate-700"
-                }`}
-              >
-                {tab}
-                {activeTab === tab && (
-                  <div className="absolute bottom-0 left-0 w-full h-0.5 bg-main-blue rounded-t-full" />
-                )}
-              </button>
-            ))}
+            {Object.values(Tab)
+              .filter((tab) => tab !== Tab.Review)
+              .map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-6 py-3 text-sm font-medium transition-colors relative ${
+                    activeTab === tab
+                      ? "text-main-blue"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  {tab}
+                  {activeTab === tab && (
+                    <div className="absolute bottom-0 left-0 w-full h-0.5 bg-main-blue rounded-t-full" />
+                  )}
+                </button>
+              ))}
           </div>
 
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm min-h-[400px]">
@@ -486,6 +500,19 @@ export default function DomainControl() {
                     value={evidenceDescription}
                     onChange={(e) => setEvidenceDescription(e.target.value)}
                     placeholder="Describe the evidence you have..."
+                    className="w-full h-24 p-3 rounded-lg border border-slate-200 focus:border-main-blue focus:ring-1 focus:ring-main-blue outline-none transition-all resize-none"
+                  />
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-slate-800">
+                    Context / Notes
+                  </h3>
+                  <textarea
+                    disabled={!canEdit}
+                    value={context}
+                    onChange={(e) => setContext(e.target.value)}
+                    placeholder="Add internal notes or context..."
                     className="w-full h-24 p-3 rounded-lg border border-slate-200 focus:border-main-blue focus:ring-1 focus:ring-main-blue outline-none transition-all resize-none"
                   />
                 </div>
@@ -742,20 +769,6 @@ export default function DomainControl() {
                 </button>
               )}
             </div>
-          </div>
-
-          {/* Context Card */}
-          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-            <h3 className="font-semibold text-slate-800 mb-4">
-              Context & Notes
-            </h3>
-            <textarea
-              disabled={!canEdit}
-              value={context}
-              onChange={(e) => setContext(e.target.value)}
-              placeholder="Add internal notes or context..."
-              className="w-full h-32 p-3 rounded-lg border border-slate-200 focus:border-main-blue focus:ring-1 focus:ring-main-blue outline-none transition-all resize-none text-sm"
-            />
           </div>
         </div>
       </div>

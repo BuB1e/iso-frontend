@@ -86,7 +86,7 @@ function StatusBadge({ status }: { status: ControlStatus }) {
   const config = controlStatusConfig[status];
   return (
     <span
-      className={`px-2 py-1 rounded-md text-xs font-medium ${config.bgColor} ${config.color}`}
+      className={`px-2 py-1 rounded-md text-xs font-medium whitespace-nowrap ${config.bgColor} ${config.color}`}
     >
       {config.label}
     </span>
@@ -106,22 +106,24 @@ function HighRiskControlItem({ control }: HighRiskControlItemProps) {
         hover:scale-[1.02] transition-all duration-75 hover:shadow-md cursor-pointer"
     >
       {/* Control Info */}
-      <div className="flex flex-row items-center gap-4">
-        <div className="flex items-center justify-center p-2 w-fit rounded-lg bg-alert-red-bg">
+      <div className="flex flex-row items-center gap-4 flex-1 min-w-0">
+        <div className="flex items-center justify-center p-2 w-fit rounded-lg bg-alert-red-bg shrink-0">
           <span className="text-sm font-bold text-alert-red">
             {control.code}
           </span>
         </div>
-        <div className="flex flex-col">
-          <h2 className="text-lg font-bold text-slate-800">{control.name}</h2>
-          <p className="text-sm text-slate-500 truncate max-w-md">
+        <div className="flex flex-col min-w-0">
+          <h2 className="text-lg font-bold text-slate-800 truncate">
+            {control.name}
+          </h2>
+          <p className="text-sm text-slate-500 truncate max-w-full">
             {control.description}
           </p>
         </div>
       </div>
 
       {/* Status & Action */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 shrink-0 pl-4">
         <StatusBadge status={control.status} />
         <ChevronRight className="w-6 h-6 text-alert-red" />
       </div>

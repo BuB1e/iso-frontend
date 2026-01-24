@@ -1,4 +1,5 @@
 import { useLoaderData } from "react-router";
+import { useState } from "react";
 import type { LoaderFunctionArgs } from "react-router";
 import { ControlItem } from "~/components/ui/controlItem";
 import {
@@ -6,6 +7,7 @@ import {
   ControlsType,
   controlsTypeDomainMap,
   controlsTypeNameMap,
+  UserRole,
 } from "~/types";
 import { ControlService } from "~/services/ControlService";
 import { AssessmentControlService } from "~/services/AssessmentControlService";
@@ -13,6 +15,7 @@ import { IsoAssessmentService } from "~/services/IsoAssessmentService";
 import type { ControlResponseDto } from "~/dto";
 import { useYearStore } from "~/stores/yearStore";
 import { useUserStore } from "~/stores/userStore";
+import { useAdminStore } from "~/stores/adminStore";
 
 // Map domain number to ControlsType
 const domainNumberToType: Record<string, ControlsType> = {
@@ -66,14 +69,26 @@ export default function DomainDetail() {
   } = useLoaderData<typeof loader>();
   const { currentYear } = useYearStore();
   const currentUser = useUserStore((state) => state.currentUser);
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+
+  // Determine effective company filter
+  const { selectedCompanyId } = useAdminStore();
+  const targetCompanyId =
+    currentUser?.role === UserRole.ADMIN
+      ? selectedCompanyId
+      : currentUser?.companyId;
 
   // Filter controls by current year AND user's company
   // 1. Find assessments for current year
-  const activeAssessments = isoAssessments.filter(
-    (a) =>
-      a.year === currentYear &&
-      (currentUser?.companyId ? a.companyId === currentUser.companyId : true),
-  );
+  const activeAssessments = isoAssessments.filter((a) => {
+    if (a.year !== currentYear) return false;
+
+    // If no target company (Global Admin View), show all
+    if (!targetCompanyId) return true;
+
+    // Otherwise, filter by specific company
+    return a.companyId === targetCompanyId;
+  });
   const activeAssessmentIds = activeAssessments.map((a) => a.id);
 
   // 2. Find assessment controls linked to active assessments
@@ -136,49 +151,71 @@ export default function DomainDetail() {
           domain for {currentYear}.
         </p>
 
-        {/* Progress Summary */}
-        <div className="flex gap-4 mt-2">
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-green-500"></span>
-            <span className="text-sm text-slate-600">
-              {implemented} Implemented
-            </span>
+        {/* Progress Summary and Filter */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mt-2">
+          <div className="flex gap-4">
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full bg-green-500"></span>
+              <span className="text-sm text-slate-600">
+                {implemented} Implemented
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full bg-yellow-500"></span>
+              <span className="text-sm text-slate-600">
+                {
+                  filteredControls.filter(
+                    (c) => c.status === ControlStatus.PARTIALLY,
+                  ).length
+                }{" "}
+                Partially
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full bg-gray-300"></span>
+              <span className="text-sm text-slate-600">
+                {
+                  filteredControls.filter(
+                    (c) => c.status === ControlStatus.NOT_IMPLEMENTED,
+                  ).length
+                }{" "}
+                Not Implemented
+              </span>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-yellow-500"></span>
-            <span className="text-sm text-slate-600">
-              {
-                filteredControls.filter(
-                  (c) => c.status === ControlStatus.PARTIALLY,
-                ).length
-              }{" "}
-              Partially
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-gray-300"></span>
-            <span className="text-sm text-slate-600">
-              {
-                filteredControls.filter(
-                  (c) => c.status === ControlStatus.NOT_IMPLEMENTED,
-                ).length
-              }{" "}
+
+          {/* Filter Dropdown */}
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-main-blue/20"
+          >
+            <option value="ALL">All Status</option>
+            <option value={ControlStatus.IMPLEMENTED}>Implemented</option>
+            <option value={ControlStatus.PARTIALLY}>
+              Partially Implemented
+            </option>
+            <option value={ControlStatus.NOT_IMPLEMENTED}>
               Not Implemented
-            </span>
-          </div>
+            </option>
+          </select>
         </div>
       </div>
 
       {/* Controls List */}
       <div className="flex flex-col gap-3">
-        {filteredControls.length > 0 ? (
-          filteredControls.map((control) => (
-            <ControlItem
-              key={control.id} // Use ID as key, not code, since codes assume uniqueness but filtering ensures one per year
-              control={control}
-              assessmentControl={currentAssessmentControl}
-            />
-          ))
+        {filteredControls.filter(
+          (c) => statusFilter === "ALL" || c.status === statusFilter,
+        ).length > 0 ? (
+          filteredControls
+            .filter((c) => statusFilter === "ALL" || c.status === statusFilter)
+            .map((control) => (
+              <ControlItem
+                key={control.id} // Use ID as key, not code, since codes assume uniqueness but filtering ensures one per year
+                control={control}
+                assessmentControl={currentAssessmentControl}
+              />
+            ))
         ) : (
           <div className="p-8 text-center border border-dashed border-slate-300 rounded-xl">
             <p className="text-slate-500">

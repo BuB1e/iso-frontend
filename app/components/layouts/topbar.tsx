@@ -1,6 +1,7 @@
 import { Calendar } from "lucide-react";
 import { TopbarYearCombobox } from "~/components/ui/combobox";
 import { RoleSwitcher } from "~/components/ui/roleSwitcher";
+import { CompanySwitcher } from "~/components/ui/companySwitcher";
 import { useHasAnyUnsavedChanges } from "~/stores/formCacheStore";
 
 export default function Topbar() {
@@ -32,7 +33,10 @@ export default function Topbar() {
       </div>
 
       {/* Right: Role switcher (dev tool) */}
-      <RoleSwitcher />
+      <div className="flex items-center gap-4">
+        <CompanySwitcher />
+        <RoleSwitcher />
+      </div>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { useActionData, Form, useNavigation } from "react-router";
 import type { ActionFunctionArgs } from "react-router";
 import { Settings, User, Save, Camera } from "lucide-react";
 import { PageHeader, SectionHeader } from "~/components/ui/pageHeader";
+import { UserService } from "~/services/UserService";
 import { useUserStore } from "~/stores/userStore";
 import { useProfileFormStore } from "~/stores";
 import { userRoleConfig, UserRole } from "~/types";
@@ -13,13 +14,19 @@ export async function action({ request }: ActionFunctionArgs) {
   const intent = formData.get("intent") as string;
 
   if (intent === "updateProfile") {
-    // TODO: Call UserService to update profile
-    console.log("Updating profile:", {
-      firstName: formData.get("firstName"),
-      lastName: formData.get("lastName"),
-      email: formData.get("email"),
+    const id = formData.get("id") as string;
+    const firstName = formData.get("firstName") as string;
+    const lastName = formData.get("lastName") as string;
+    const email = formData.get("email") as string;
+
+    const result = await UserService.updateUserById({
+      id,
+      firstName,
+      lastName,
+      email,
     });
-    return { success: true, intent };
+
+    return { success: !!result, intent };
   }
 
   return { success: false };
@@ -83,6 +90,7 @@ export default function SettingsPage() {
 
         <Form method="post" className="flex flex-col gap-6 mt-6">
           <input type="hidden" name="intent" value="updateProfile" />
+          <input type="hidden" name="id" value={currentUser.id} />
 
           {/* Avatar */}
           <div className="flex items-center gap-6">
@@ -140,10 +148,11 @@ export default function SettingsPage() {
           </div>
 
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium text-slate-700">Email</label>
+            <label className="text-sm font-medium text-slate-700">Email (Cannot be changed)</label>
             <input
               type="email"
               name="email"
+              disabled={true}
               value={email}
               onChange={(e) => setField("email", e.target.value)}
               className="px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-main-blue/20 focus:border-main-blue"

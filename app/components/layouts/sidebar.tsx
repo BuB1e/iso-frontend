@@ -13,10 +13,12 @@ import {
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
-import { Link } from "react-router";
-import { useSidebarStore, useUserStore } from "~/stores";
+import { Link, useNavigate } from "react-router";
+import { useCompanyFormStore, useSidebarStore, useUserStore } from "~/stores";
+import { authClient } from "~/lib/auth-client";
 import { ESidebarPage, UserRole } from "~/types";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { CompanyService } from "~/services/CompanyService";
 
 interface SidebarItemsProps {
   isOpen: boolean;
@@ -87,6 +89,17 @@ function SidebarOpenButton({
 
 function SidebarAvatar({ isOpen }: { isOpen: boolean }) {
   const currentUser = useUserStore((state) => state.currentUser);
+  const [companyName, setCompanyName] = useState<string>("");
+
+  useEffect(() => {
+    if (currentUser?.companyId) {
+      CompanyService.getCompanyById(currentUser.companyId).then((company) => {
+        if (company) setCompanyName(company.name);
+      });
+    } else {
+      setCompanyName("");
+    }
+  }, [currentUser]);
 
   if (!currentUser) return null;
 
@@ -99,11 +112,19 @@ function SidebarAvatar({ isOpen }: { isOpen: boolean }) {
         <img
           src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ4YreOWfDX3kK-QLAbAL4ufCPc84ol2MA8Xg&s"
           alt="user_avatar"
-          className="w-12 h-12 rounded-full"
+          className="w-12 h-12 rounded-full border-2 border-white/50 shadow-sm"
         />
         <div className={`flex flex-col text-main-blue ${!isOpen && "hidden"}`}>
           <span className="font-medium">{fullName}</span>
           <span className="text-xs opacity-80">{roleLabel}</span>
+          {companyName && (
+            <span
+              className="text-xs font-semibold mt-0.5 truncate max-w-[140px]"
+              title={companyName}
+            >
+              {companyName}
+            </span>
+          )}
         </div>
       </div>
     </div>
@@ -117,19 +138,33 @@ function SignOut({
   isOpen: boolean;
   style: { text: string; icon: string; button: string };
 }) {
-  const logout = useUserStore((state) => state.logout);
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    // 1. Clear server session
+    await authClient.signOut({
+      fetchOptions: {
+        onSuccess: () => {
+          // 2. Clear client store (optional if store is derived from session, but good for immediate feedback)
+          // useUserStore.getState().logout(); // If you want to force clear, but navigation usually handles it
+
+          // 3. Redirect
+          navigate("/login");
+        },
+      },
+    });
+  };
 
   return (
     <div className="py-4">
-      <Link
-        to="/login"
-        onClick={logout}
+      <button
+        onClick={handleLogout}
         className={`flex flex-row ${!isOpen ? "w-fit p-4" : "p-2"} justify-center items-center gap-4
-          ${style.text} ${style.button} bg-light-brown`}
+          ${style.text} ${style.button} bg-light-brown w-full cursor-pointer border-none outline-none`}
       >
         <LogOut className={style.icon} />
         <span className={`${!isOpen && "hidden"}`}>Sign Out</span>
-      </Link>
+      </button>
     </div>
   );
 }
@@ -170,7 +205,18 @@ function SidebarItems({
       url: ESidebarPage.Settings,
       icon: Settings,
     },
-  ];
+  ].filter((item) => {
+    // Admin sees everything
+    if (isAdmin) return true;
+
+    // Users with company see everything
+    if (currentUser?.companyId) return true;
+
+    // Unassigned users only see Dashboard and Settings
+    return (
+      item.url === ESidebarPage.Dashboard || item.url === ESidebarPage.Settings
+    );
+  });
 
   const adminItems = [
     {

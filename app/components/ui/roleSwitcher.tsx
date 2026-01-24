@@ -1,12 +1,16 @@
+import { useNavigate } from "react-router";
+import { LogOut } from "lucide-react";
+import { authClient } from "~/lib/auth-client";
 import { useUserStore } from "~/stores/userStore";
-import { UserRole, userRoleConfig } from "~/types";
+import { userRoleConfig } from "~/types";
 
 /**
- * Role Switcher Component - Development tool for testing different user roles
- * Shows in topbar for easy role switching during development
+ * User Profile Component
+ * Shows current user info and logout button
  */
 export function RoleSwitcher() {
-  const { currentUser, setRole } = useUserStore();
+  const { currentUser } = useUserStore();
+  const navigate = useNavigate();
 
   if (!currentUser) return null;
 
@@ -14,18 +18,11 @@ export function RoleSwitcher() {
 
   return (
     <div className="flex items-center gap-3">
-      <span className="text-xs text-slate-500">Testing as:</span>
-      <select
-        value={currentUser.role}
-        onChange={(e) => setRole(e.target.value as UserRole)}
-        className={`px-3 py-1.5 text-xs font-bold rounded-lg border-2 cursor-pointer transition-all
-          ${roleConfig.bgColor} ${roleConfig.color} border-current
-          hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-1`}
+      <div
+        className={`px-2 py-1 text-xs font-bold rounded-lg border border-current ${roleConfig.bgColor} ${roleConfig.color}`}
       >
-        <option value={UserRole.ADMIN}>ADMIN</option>
-        <option value={UserRole.INTERNAL_EXPERT}>INTERNAL EXPERT</option>
-        <option value={UserRole.EXTERNAL_EXPERT}>EXTERNAL EXPERT</option>
-      </select>
+        {roleConfig.label}
+      </div>
     </div>
   );
 }

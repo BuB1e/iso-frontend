@@ -211,7 +211,7 @@ function ProgressStatusRow({ stats }: { stats: DomainStats }) {
       />
       <ProgressStatusCard
         progressStatus={ProgressStatus.Total}
-        current={stats.total}
+        current={stats.done}
         total={stats.total}
       />
     </div>

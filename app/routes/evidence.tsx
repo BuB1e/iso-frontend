@@ -25,7 +25,14 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { EvidenceService } from "~/services/EvidenceService";
+import { ControlService } from "~/services/ControlService";
+import { AssessmentControlService } from "~/services/AssessmentControlService";
+import { IsoAssessmentService } from "~/services/IsoAssessmentService";
 import type { EvidenceResponseDto } from "~/dto";
+import { useUserStore } from "~/stores/userStore";
+import { useAdminStore } from "~/stores/adminStore";
+import { useYearStore } from "~/stores/yearStore";
+import { UserRole } from "~/types";
 
 // Extended interface
 interface Evidence extends EvidenceResponseDto {
@@ -34,10 +41,21 @@ interface Evidence extends EvidenceResponseDto {
 
 const ITEMS_PER_PAGE = 5;
 
-// Loader - fetch evidence from API
+// Loader - fetch evidence and relations
 export async function loader() {
-  const evidences = await EvidenceService.getAllEvidence();
-  return { evidences: evidences as Evidence[] };
+  const [evidences, controls, assessmentControls, isoAssessments] =
+    await Promise.all([
+      EvidenceService.getAllEvidence(),
+      ControlService.getAllControl(),
+      AssessmentControlService.getAllAssessmentControl(),
+      IsoAssessmentService.getAllIsoAssessment(),
+    ]);
+  return {
+    evidences: evidences as Evidence[],
+    controls,
+    assessmentControls,
+    isoAssessments,
+  };
 }
 
 // Action - handle delete
@@ -64,22 +82,78 @@ function FileIcon({ filename }: { filename: string }) {
 }
 
 export default function Evidence() {
-  const { evidences } = useLoaderData<typeof loader>();
+  const { evidences, controls, assessmentControls, isoAssessments } =
+    useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isDeleting = navigation.state === "submitting";
 
+  const { currentYear } = useYearStore();
+  const currentUser = useUserStore((state) => state.currentUser);
+  const { selectedCompanyId } = useAdminStore();
+
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Filter evidence based on search query
+  // 1. Filter Evidence by Admin Context / User Company
+  const scopedEvidence = useMemo(() => {
+    // Determine effective company filter
+    const targetCompanyId =
+      currentUser?.role === UserRole.ADMIN
+        ? selectedCompanyId
+        : currentUser?.companyId;
+
+    // Admin Global View: Show all (or filter by nothing)
+    // But conceptually simpler to just show all if no target
+    if (currentUser?.role === UserRole.ADMIN && !targetCompanyId) {
+      // Show ALL evidence across ALL companies?
+      // Yes, Global Admin View
+      return evidences;
+    }
+
+    if (!targetCompanyId) return []; // Unassigned user sees nothing
+
+    // Build allowed chain
+    // 1. Assessments for company & year (optional year filter? User asked "Assessment... Summary, Evidence (has company filter)")
+    // Assuming Year Filter applies too for consistency with other pages
+    const activeAssessments = isoAssessments.filter(
+      (a) => a.companyId === targetCompanyId && a.year === currentYear,
+    );
+    const activeAssessmentIds = activeAssessments.map((a) => a.id);
+
+    // 2. Assessment Controls
+    const activeAssessmentControls = assessmentControls.filter((ac) =>
+      activeAssessmentIds.includes(ac.isoAssessmentId),
+    );
+    const activeAssessmentControlIds = activeAssessmentControls.map(
+      (ac) => ac.id,
+    );
+
+    // 3. Controls
+    const activeControlIds = controls
+      .filter((c) => activeAssessmentControlIds.includes(c.assessmentControlId))
+      .map((c) => c.id);
+
+    // 4. Evidence
+    return evidences.filter((e) => activeControlIds.includes(e.controlId));
+  }, [
+    evidences,
+    controls,
+    assessmentControls,
+    isoAssessments,
+    currentUser,
+    selectedCompanyId,
+    currentYear, // Added year dependence
+  ]);
+
+  // 2. Apply Search Filter
   const filteredEvidence = useMemo(() => {
-    if (!searchQuery.trim()) return evidences;
+    if (!searchQuery.trim()) return scopedEvidence;
     const query = searchQuery.toLowerCase();
-    return evidences.filter((evidence) =>
+    return scopedEvidence.filter((evidence) =>
       evidence.fileName.toLowerCase().includes(query),
     );
-  }, [searchQuery, evidences]);
+  }, [searchQuery, scopedEvidence]);
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredEvidence.length / ITEMS_PER_PAGE);

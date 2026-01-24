@@ -5,3 +5,4 @@ export * from "./companyFormStore";
 export * from "./userFormStore";
 export * from "./controlFormStore";
 export * from "./profileFormStore";
+export * from "./adminStore";

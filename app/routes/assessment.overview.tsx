@@ -1,11 +1,12 @@
 import { useLoaderData } from "react-router";
-import { Domains, type TDomain, ControlStatus } from "~/types";
+import { Domains, type TDomain, ControlStatus, UserRole } from "~/types";
 import { DomainCard, type DomainStats } from "~/components/ui/domainCard";
 import { ControlService } from "~/services/ControlService";
 import { AssessmentControlService } from "~/services/AssessmentControlService";
 import { IsoAssessmentService } from "~/services/IsoAssessmentService";
 import { useYearStore } from "~/stores/yearStore";
 import { useUserStore } from "~/stores/userStore";
+import { useAdminStore } from "~/stores/adminStore";
 
 export async function loader() {
   // Fetch all necessary data to filter by year
@@ -24,13 +25,29 @@ export default function AssessmentOverview() {
   const { currentYear } = useYearStore();
   const currentUser = useUserStore((state) => state.currentUser);
 
+  // Determine effective company filter
+  const { selectedCompanyId } = useAdminStore();
+  const targetCompanyId =
+    currentUser?.role === UserRole.ADMIN
+      ? selectedCompanyId
+      : currentUser?.companyId;
+
   // Filter controls by current year AND user's company
   // 1. Find assessments for current year
-  const activeAssessments = isoAssessments.filter(
-    (a) =>
-      a.year === currentYear &&
-      (currentUser?.companyId ? a.companyId === currentUser.companyId : true),
-  );
+  const activeAssessments = isoAssessments.filter((a) => {
+    if (a.year !== currentYear) return false;
+
+    // If no target company...
+    if (!targetCompanyId) {
+      // Admin Global View: Show all
+      if (currentUser?.role === UserRole.ADMIN) return true;
+      // Unassigned User: Show nothing
+      return false;
+    }
+
+    // Otherwise, filter by specific company
+    return a.companyId === targetCompanyId;
+  });
   const activeAssessmentIds = activeAssessments.map((a) => a.id);
 
   // 2. Find assessment controls linked to active assessments

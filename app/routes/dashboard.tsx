@@ -12,11 +12,19 @@ import {
   Star,
 } from "lucide-react";
 import { Link, useLoaderData } from "react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { DashboardCard } from "~/components/ui/card";
 import { ControlItem } from "~/components/ui/controlItem";
 import { StatusBadge } from "~/components/ui/statusBadge";
 import { PageHeader, SectionHeader } from "~/components/ui/pageHeader";
+import {
+  Modal,
+  ModalContent,
+  ModalHeader,
+  ModalTitle,
+  ModalDescription,
+  ModalFooter,
+} from "~/components/ui/modal";
 import {
   ControlStatus,
   type TControl,
@@ -24,6 +32,7 @@ import {
   UserRole,
 } from "~/types";
 import { useUserStore } from "~/stores/userStore";
+import { useAdminStore } from "~/stores/adminStore";
 import { useYearStore } from "~/stores/yearStore";
 import { CompanyService } from "~/services/CompanyService";
 import { UserService } from "~/services/UserService";
@@ -71,6 +80,7 @@ export default function Dashboard() {
     useLoaderData<typeof loader>();
   const currentUser = useUserStore((state) => state.currentUser);
   const { currentYear, setAllYears } = useYearStore();
+  const { selectedCompanyId } = useAdminStore();
 
   // Populate available years in store
   useEffect(() => {
@@ -88,11 +98,23 @@ export default function Dashboard() {
 
   // Filter data by current year
   // Filter data by current year AND user's company
-  const filteredAssessments = isoAssessments.filter(
-    (a) =>
-      a.year === currentYear &&
-      (currentUser.companyId ? a.companyId === currentUser.companyId : true),
-  );
+  // Determine effective company filter
+  const targetCompanyId =
+    currentUser.role === UserRole.ADMIN
+      ? selectedCompanyId
+      : currentUser.companyId;
+
+  // Filter assessments based on target context
+  const filteredAssessments = isoAssessments.filter((a) => {
+    // 1. Always filter by year
+    if (a.year !== currentYear) return false;
+
+    // If no target company (Global Admin View), show all
+    if (!targetCompanyId) return true;
+
+    // Otherwise, filter by specific company
+    return a.companyId === targetCompanyId;
+  });
   const filteredAssessmentIds = filteredAssessments.map((a) => a.id);
 
   // Filter downstream data (for Internal Dashboard)
@@ -110,8 +132,10 @@ export default function Dashboard() {
   );
 
   // Render different dashboards based on role
-  switch (currentUser.role) {
-    case UserRole.ADMIN:
+  // 1. Admin Hybrid View
+  if (currentUser.role === UserRole.ADMIN) {
+    if (!selectedCompanyId) {
+      // Global View
       return (
         <AdminDashboard
           companies={companies}
@@ -119,30 +143,68 @@ export default function Dashboard() {
           isoAssessments={filteredAssessments}
         />
       );
-    case UserRole.INTERNAL_EXPERT:
-      // InternalExpert needs TAssessmentControl (domains)
-      // assessmentControls from service are AssessmentControlResponseDto, which might need mapping to TAssessmentControl if types differ
-      // TAssessmentControl: { id, count, maxCount, type, assessmentId, description }
-      // DTO: { id, code, description, type, isoAssessmentId }
-      // We assume DTO matches closely enough or we cast/map
-      // We'll cast for now as TAssessmentControl is cleaner
-      return (
-        <InternalExpertDashboard
-          controls={filteredControls}
-          assessmentControls={
-            filteredAssessmentControls as unknown as TAssessmentControl[]
-          }
-        />
-      );
-    case UserRole.EXTERNAL_EXPERT:
-      return <ExternalExpertDashboard companies={companies} />;
-    default:
-      return <div className="p-8">Unknown Role</div>;
+    }
+
+    // Hybrid View (Selected Company)
+    const detailProps = {
+      controls: filteredControls,
+      assessmentControls:
+        filteredAssessmentControls as unknown as TAssessmentControl[],
+    };
+
+    return (
+      <AdminDashboard
+        companies={companies}
+        users={users}
+        isoAssessments={isoAssessments}
+        detailProps={detailProps}
+      />
+    );
   }
+
+  // 2. Unassigned Non-Admin User (Safety Check)
+  if (!currentUser.companyId) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-xl font-bold text-slate-800">
+            Account Pending Assignment
+          </h1>
+          <p className="text-slate-500">
+            Please contact your administrator to be assigned to a company.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // 3. Regular Internal Expert
+  if (currentUser.role === UserRole.INTERNAL_EXPERT) {
+    return (
+      <InternalExpertDashboard
+        controls={filteredControls}
+        assessmentControls={
+          filteredAssessmentControls as unknown as TAssessmentControl[]
+        }
+      />
+    );
+  }
+
+  // 4. External Expert
+  if (currentUser.role === UserRole.EXTERNAL_EXPERT) {
+    return <ExternalExpertDashboard companies={companies} />;
+  }
+
+  return <div className="p-8">Unknown Role Config</div>;
 }
 
 // ============ ADMIN DASHBOARD ============
-function AdminDashboard({ companies, users, isoAssessments }: any) {
+function AdminDashboard({
+  companies,
+  users,
+  isoAssessments,
+  detailProps,
+}: any) {
   const stats = {
     totalCompanies: companies.length,
     totalUsers: users.length,
@@ -201,6 +263,16 @@ function AdminDashboard({ companies, users, isoAssessments }: any) {
           </div>
         </div>
       </div>
+
+      {/* Selected Company Details */}
+      {detailProps && (
+        <div className="mt-8 border-t border-slate-200 pt-8">
+          <SectionHeader title="Selected Company Overview" />
+          <div className="-mx-8">
+            <InternalExpertDashboard {...detailProps} hideHeader />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -209,9 +281,11 @@ function AdminDashboard({ companies, users, isoAssessments }: any) {
 function InternalExpertDashboard({
   controls,
   assessmentControls,
+  hideHeader = false,
 }: {
   controls: TControl[];
   assessmentControls: TAssessmentControl[];
+  hideHeader?: boolean;
 }) {
   const stats = calculateStats(controls);
   const compliancePercentage =
@@ -220,7 +294,7 @@ function InternalExpertDashboard({
   // Filter high risk (not implemented)
   const highRiskList = controls
     .filter((c) => c.status === ControlStatus.NOT_IMPLEMENTED)
-    .slice(0, 3)
+    // Passed full list to component which handles slicing
     .map((control) => {
       // Find matching assessment control (domain)
       const assessmentControl = assessmentControls.find(
@@ -242,12 +316,16 @@ function InternalExpertDashboard({
     });
 
   return (
-    <div className="flex flex-col min-h-screen py-8 px-8 lg:px-16 bg-slate-50/50 gap-6">
-      <PageHeader
-        title="Dashboard"
-        description="Overview of your ISO 27001 compliance status and key metrics"
-        icon={LayoutDashboard}
-      />
+    <div
+      className={`flex flex-col ${!hideHeader ? "min-h-screen py-8 px-8 lg:px-16" : "py-4 px-8"} bg-slate-50/50 gap-6`}
+    >
+      {!hideHeader && (
+        <PageHeader
+          title="Dashboard"
+          description="Overview of your ISO 27001 compliance status and key metrics"
+          icon={LayoutDashboard}
+        />
+      )}
 
       {/* Stats Cards */}
       <div className="flex justify-between gap-4 w-full">
@@ -422,42 +500,84 @@ function HighRiskControlList({
 }: {
   controls: { control: TControl; assessmentControl: TAssessmentControl }[];
 }) {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const displayControls = controls.slice(0, 3); // Show top 3 in summary
+
   return (
-    <div className="flex flex-col justify-start items-start h-fit w-full py-6 px-6 rounded-lg border-2 bg-main-gray border-alert-red-bg shadow-xl">
-      {/* Header */}
-      <div className="flex flex-row items-center justify-between gap-4 mb-4 w-full">
-        <div className="flex flex-row items-center gap-4">
-          <div className="flex flex-row items-center p-2 rounded-lg bg-alert-red-bg">
-            <TriangleAlert className="w-8 h-8 text-alert-red" />
+    <>
+      <div className="flex flex-col justify-start items-start h-fit w-full py-6 px-6 rounded-lg border-2 bg-main-gray border-alert-red-bg shadow-xl">
+        {/* Header */}
+        <div className="flex flex-row items-center justify-between gap-4 mb-4 w-full">
+          <div className="flex flex-row items-center gap-4">
+            <div className="flex flex-row items-center p-2 rounded-lg bg-alert-red-bg">
+              <TriangleAlert className="w-8 h-8 text-alert-red" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-slate-800">
+                High Risk Controls
+              </h2>
+              <p className="text-sm text-slate-500">
+                Controls that require immediate attention
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-xl font-bold text-slate-800">
-              High Risk Controls
-            </h2>
-            <p className="text-sm text-slate-500">
-              Controls that require immediate attention
-            </p>
-          </div>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center gap-1 text-sm text-main-blue hover:underline"
+          >
+            View All <ChevronRight className="w-4 h-4" />
+          </button>
         </div>
-        <Link
-          to="/assessment/overview"
-          className="flex items-center gap-1 text-sm text-main-blue hover:underline"
-        >
-          View All <ChevronRight className="w-4 h-4" />
-        </Link>
+
+        {/* Controls List (Top 3) */}
+        <div className="flex flex-col justify-between items-start h-fit w-full gap-3">
+          {displayControls.map(({ control, assessmentControl }) => (
+            <ControlItem
+              key={control.code}
+              control={control}
+              assessmentControl={assessmentControl}
+              isHighRisk={true}
+            />
+          ))}
+        </div>
       </div>
 
-      {/* Controls List */}
-      <div className="flex flex-col justify-between items-start h-fit w-full gap-3">
-        {controls.map(({ control, assessmentControl }) => (
-          <ControlItem
-            key={control.code}
-            control={control}
-            assessmentControl={assessmentControl}
-            isHighRisk={true}
-          />
-        ))}
-      </div>
-    </div>
+      {/* Full List Modal */}
+      <Modal open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <ModalContent size="xl" className="max-h-[80vh] flex flex-col">
+          <ModalHeader>
+            <ModalTitle className="flex items-center gap-2 text-alert-red">
+              <TriangleAlert className="w-5 h-5" />
+              All High Risk Controls ({controls.length})
+            </ModalTitle>
+            <ModalDescription>
+              Complete list of controls that are not yet implemented.
+            </ModalDescription>
+          </ModalHeader>
+
+          <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-[300px] p-4">
+            <div className="flex flex-col gap-3">
+              {controls.map(({ control, assessmentControl }) => (
+                <ControlItem
+                  key={control.code}
+                  control={control}
+                  assessmentControl={assessmentControl}
+                  isHighRisk={true}
+                />
+              ))}
+            </div>
+          </div>
+
+          <ModalFooter>
+            <button
+              onClick={() => setIsModalOpen(false)}
+              className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50"
+            >
+              Close
+            </button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+    </>
   );
 }

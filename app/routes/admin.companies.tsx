@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   useLoaderData,
   useActionData,
@@ -87,20 +87,28 @@ export default function AdminCompanies() {
     reset,
   } = useCompanyFormStore();
 
+  // Local state for create modal since store is form-data only
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+
   // Clear form after successful action
   useEffect(() => {
     if (actionData?.success) {
       reset();
+      setIsCreateOpen(false);
     }
   }, [actionData, reset]);
 
-  // Modal state derived from form store
-  const isModalOpen = code !== "" || name !== "" || isEditing;
+  // Modal state
+  const isModalOpen = isCreateOpen || isEditing;
 
   const openCreateModal = () => {
     reset();
-    setField("code", " "); // Trigger modal open
-    setField("code", "");
+    setIsCreateOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    reset();
+    setIsCreateOpen(false);
   };
 
   const openEditModal = (company: Company) => {
@@ -221,7 +229,10 @@ export default function AdminCompanies() {
       </div>
 
       {/* Create/Edit Modal */}
-      <Modal open={isModalOpen} onOpenChange={(open) => !open && reset()}>
+      <Modal
+        open={isModalOpen}
+        onOpenChange={(open) => !open && handleCloseModal()}
+      >
         <ModalContent size="md">
           <ModalHeader>
             <ModalTitle>
@@ -296,7 +307,7 @@ export default function AdminCompanies() {
             <ModalFooter>
               <button
                 type="button"
-                onClick={reset}
+                onClick={handleCloseModal}
                 className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50"
               >
                 Cancel

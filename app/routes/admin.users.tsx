@@ -21,7 +21,7 @@ import {
 import { UserService } from "~/services/UserService";
 import { CompanyService } from "~/services/CompanyService";
 import type { UserResponseDto, CompanyResponseDto } from "~/dto";
-import { useUserFormStore } from "~/stores";
+import { useUserFormStore, useUserStore } from "~/stores";
 import { UserRole } from "~/types";
 
 // Extended interface for DataTable compatibility
@@ -88,6 +88,7 @@ export default function AdminUsers() {
   // Zustand form store
   const { role, companyId, editingId, setField, startEdit, reset } =
     useUserFormStore();
+  const loggedInUser = useUserStore((state) => state.currentUser);
 
   // Filter state
   const [filter, setFilter] = useState<FilterType>("all");
@@ -106,8 +107,19 @@ export default function AdminUsers() {
     startEdit(user.id, user.role, user.companyId || null);
   };
 
-  // Filter users
-  const filteredUsers = users.filter((user) => {
+  // Filter users based on logged-in user's company scope
+  const scopedUsers = users.filter((user) => {
+    // 1. Admin sees all users
+    if (loggedInUser?.role === UserRole.ADMIN) return true;
+    // 2. Company Users see only users from same company
+    if (loggedInUser?.companyId)
+      return user.companyId === loggedInUser.companyId;
+    // 3. Unassigned users see nothing
+    return false;
+  });
+
+  // Apply UI filters to the scoped list
+  const filteredUsers = scopedUsers.filter((user) => {
     if (filter === "unassigned") return user.companyId === null;
     if (filter === "assigned") return user.companyId !== null;
     return true;

@@ -5,6 +5,7 @@ import {
   ControlsType,
   type TControl,
   type TAssessmentControl,
+  UserRole,
 } from "~/types";
 import { IsoAssessmentService } from "~/services/IsoAssessmentService";
 import { ControlService } from "~/services/ControlService";
@@ -12,6 +13,7 @@ import { AssessmentControlService } from "~/services/AssessmentControlService";
 import type { SummaryItemDto, DomainSummary } from "~/dto";
 import { useYearStore } from "~/stores/yearStore";
 import { useUserStore } from "~/stores/userStore";
+import { useAdminStore } from "~/stores/adminStore";
 
 // Map backend type to display info
 const typeConfig: Record<
@@ -58,19 +60,28 @@ function processSummaryData(
     { notImplemented: number; partially: number; implemented: number }
   >();
 
-  // Initialize all domain types
-  for (const type of Object.values(ControlsType) as ControlsType[]) {
+  // Initialize only valid domain types present in config
+  // Object.keys returns strings, so cast to Number for Enum keys
+  // typeConfig keys are 0, 1, 2, 3 (ControlsType values)
+  for (const key of Object.keys(typeConfig)) {
+    const type = Number(key) as ControlsType;
     domainMap.set(type, { notImplemented: 0, partially: 0, implemented: 0 });
   }
 
-  // Aggregate counts from real controls
+  // Aggregate counts
   for (const control of controls) {
-    // Find type via assessmentControlId
     const ac = assessmentControls.find(
       (a) => a.id === control.assessmentControlId,
     );
     if (ac) {
-      const type = ac.type;
+      // Resolve backend type (which might be string "ORGANIZATION") to Enum Value (2)
+      // If ac.type is already number, use it. If string, look it up in Enum.
+      let type = ac.type;
+      if (typeof type === "string") {
+        // @ts-ignore - access enum by string key
+        type = ControlsType[type];
+      }
+
       const existing = domainMap.get(type);
       if (existing) {
         if (control.status === ControlStatus.NOT_IMPLEMENTED) {
@@ -84,7 +95,7 @@ function processSummaryData(
     }
   }
 
-  // Convert to DomainSummary array
+  // Convert to DomainSummary
   const domains: DomainSummary[] = [];
   let totalImplemented = 0;
   let totalPartially = 0;
@@ -92,6 +103,9 @@ function processSummaryData(
 
   for (const [type, counts] of domainMap) {
     const config = typeConfig[type];
+    // Config should exist because we initialized map from typeConfig keys
+    if (!config) continue;
+
     const total = counts.notImplemented + counts.partially + counts.implemented;
     const percentage =
       total > 0 ? Math.round((counts.implemented / total) * 100) : 0;
@@ -148,12 +162,28 @@ export default function SummaryPage() {
   const { currentYear } = useYearStore();
   const currentUser = useUserStore((state) => state.currentUser);
 
+  // Determine effective company filter
+  const { selectedCompanyId } = useAdminStore();
+  const targetCompanyId =
+    currentUser?.role === UserRole.ADMIN
+      ? selectedCompanyId
+      : currentUser?.companyId;
+
   // Filter by year AND user's company
-  const activeAssessments = isoAssessments.filter(
-    (a) =>
-      a.year === currentYear &&
-      (currentUser?.companyId ? a.companyId === currentUser.companyId : true),
-  );
+  const activeAssessments = isoAssessments.filter((a) => {
+    if (a.year !== currentYear) return false;
+
+    // If no target company...
+    if (!targetCompanyId) {
+      // Admin Global View: Show all
+      if (currentUser?.role === UserRole.ADMIN) return true;
+      // Unassigned User: Show nothing
+      return false;
+    }
+
+    // Otherwise, filter by specific company
+    return Number(a.companyId) === Number(targetCompanyId);
+  });
   const activeAssessmentIds = activeAssessments.map((a) => a.id);
   const activeAssessmentControls = assessmentControls.filter((ac) =>
     activeAssessmentIds.includes(ac.isoAssessmentId),
@@ -235,6 +265,23 @@ export default function SummaryPage() {
                   <p className="font-medium text-slate-800">System Generated</p>
                 </div>
               </div>
+
+              {/* Debug Info - Remove in production */}
+              {filteredControls.length === 0 && (
+                <div className="p-4 bg-orange-50 border border-orange-200 rounded mt-4 text-xs font-mono text-orange-800 print:hidden">
+                  <p>
+                    <strong>Debug: No Data Found</strong>
+                  </p>
+                  <p>Target Company ID: {targetCompanyId}</p>
+                  <p>Current Year: {currentYear}</p>
+                  <p>Active Assessments: {activeAssessments.length}</p>
+                  <p>
+                    Active Assessment Controls:{" "}
+                    {activeAssessmentControls.length}
+                  </p>
+                  <p>Total Controls Fetched: {controls.length}</p>
+                </div>
+              )}
             </header>
 
             {/* 1. Compliance Overview */}
