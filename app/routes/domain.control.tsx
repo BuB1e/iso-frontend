@@ -621,7 +621,7 @@ export default function DomainControl() {
                     </button>
                   )}
                 </div>
-
+{/* Need to make this work */}
                 {aiAnalysis ? (
                   <div className="space-y-6 animate-in fade-in duration-500">
                     {/* Score */}
