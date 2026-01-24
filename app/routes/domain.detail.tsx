@@ -1,5 +1,5 @@
 import { useLoaderData } from "react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { LoaderFunctionArgs } from "react-router";
 import { ControlItem } from "~/components/ui/controlItem";
 import {
@@ -113,6 +113,14 @@ export default function DomainDetail() {
 
   const domainName = controlsTypeNameMap[domainType as ControlsType];
   const domainNum = controlsTypeDomainMap[domainType as ControlsType];
+
+  // Set page title
+  useEffect(() => {
+    document.title = `${domainNum} ${domainName} | ISO Portal`;
+    return () => {
+      document.title = "ISO Portal";
+    };
+  }, [domainNum, domainName]);
 
   // Calculate progress stats based on filtered controls
   const implemented = filteredControls.filter(

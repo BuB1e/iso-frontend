@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   useLoaderData,
   useActionData,
@@ -27,6 +27,8 @@ import {
   XCircle,
   ChevronRight,
   Loader2,
+  Copy,
+  Check,
 } from "lucide-react";
 
 import { PageHeader } from "~/components/ui/pageHeader";
@@ -53,6 +55,7 @@ import {
   AssessmentControlService,
   IsoAssessmentService,
 } from "~/services";
+import { uploadToSupabase } from "~/lib/supabase";
 import type {
   EvidenceResponseDto,
   SuggestionResponseDto,
@@ -359,6 +362,38 @@ export default function DomainControl() {
   );
   const [reviewerComments, setReviewerComments] = useState("");
 
+  // Copy to clipboard state
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyAnalysis = async () => {
+    const textToCopy =
+      rawAnalysis || (aiAnalysis ? JSON.stringify(aiAnalysis, null, 2) : "");
+    if (!textToCopy) return;
+
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+  };
+
+  // Keyboard shortcut: Ctrl+S to save
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        if (canEdit && isDirty && !isSubmitting) {
+          handleSave();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [canEdit, isDirty, isSubmitting]);
+
   // Update local state when active control changes (year change or navigation)
   useEffect(() => {
     setStatus(control.status);
@@ -377,6 +412,14 @@ export default function DomainControl() {
       context !== (control.userContext || "");
     setIsDirty(isChanged);
   }, [status, currentPractice, evidenceDescription, context, control]);
+
+  // Set dynamic page title
+  useEffect(() => {
+    document.title = `${control.code} ${control.name} | ISO Portal`;
+    return () => {
+      document.title = "ISO Portal";
+    };
+  }, [control.code, control.name]);
 
   const handleSave = () => {
     const formData = new FormData();
@@ -404,24 +447,68 @@ export default function DomainControl() {
     submit(formData, { method: "post" });
   };
 
-  const handleUploadEvidence = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0];
-      const formData = new FormData();
-      formData.append("intent", "upload");
-      formData.append("controlId", control.id.toString());
-      formData.append("file", file);
-      submit(formData, { method: "post", encType: "multipart/form-data" });
+  // Upload state
+  const [isUploading, setIsUploading] = useState(false);
+  const evidenceInputRef = useRef<HTMLInputElement>(null);
+  const evidenceFetcher = useFetcher();
+
+  const handleUploadEvidence = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      // 1. Upload to Supabase
+      const result = await uploadToSupabase(file, "evidence");
+      if (!result) {
+        throw new Error("Failed to upload file to storage");
+      }
+
+      // 2. Save metadata to backend
+      const evidence = await EvidenceService.createEvidence({
+        fileName: file.name,
+        filePath: result.url,
+        controlId: control.id,
+      });
+
+      if (!evidence) {
+        throw new Error("Failed to save evidence metadata");
+      }
+
+      // 3. Reload page to show new evidence
+      window.location.reload();
+    } catch (err) {
+      console.error("Upload error:", err);
+      alert(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setIsUploading(false);
+      if (evidenceInputRef.current) {
+        evidenceInputRef.current.value = "";
+      }
     }
   };
 
-  const handleDeleteEvidence = (evidenceId: number) => {
-    const formData = new FormData();
-    formData.append("intent", "delete-evidence");
-    formData.append("evidenceId", evidenceId.toString());
-    // Use control.id to keep context valid? Action doesn't use it for delete but good practice
-    formData.append("controlId", control.id.toString());
-    submit(formData, { method: "post" });
+  const handleDeleteEvidence = async (evidence: EvidenceResponseDto) => {
+    if (!confirm("Delete this evidence?")) return;
+
+    try {
+      // 1. Delete from Supabase storage (if it's a Supabase URL)
+      if (evidence.filePath && evidence.filePath.includes("supabase.co")) {
+        const { deleteFromSupabase } = await import("~/lib/supabase");
+        await deleteFromSupabase(evidence.filePath, "evidence");
+      }
+
+      // 2. Delete from backend database
+      await EvidenceService.deleteEvidenceById(evidence.id);
+
+      // 3. Reload page to refresh evidence list
+      window.location.reload();
+    } catch (err) {
+      console.error("Delete error:", err);
+      alert("Failed to delete evidence");
+    }
   };
 
   return (
@@ -565,17 +652,29 @@ export default function DomainControl() {
                   {canEdit && (
                     <div className="relative">
                       <input
+                        ref={evidenceInputRef}
                         type="file"
                         id="evidence-upload"
                         className="hidden"
                         onChange={handleUploadEvidence}
+                        disabled={isUploading}
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp"
                       />
                       <label
                         htmlFor="evidence-upload"
-                        className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
+                        className={`flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors ${isUploading ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
                       >
-                        <Upload className="w-4 h-4" />
-                        Upload File
+                        {isUploading ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Uploading...
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-4 h-4" />
+                            Upload File
+                          </>
+                        )}
                       </label>
                     </div>
                   )}
@@ -612,7 +711,7 @@ export default function DomainControl() {
                           </a>
                           {canEdit && (
                             <button
-                              onClick={() => handleDeleteEvidence(evidence.id)}
+                              onClick={() => handleDeleteEvidence(evidence)}
                               className="p-2 text-slate-400 hover:text-red-500 transition-colors"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -742,8 +841,21 @@ export default function DomainControl() {
                   </div>
                 ) : rawAnalysis ? (
                   <div className="space-y-6 animate-in fade-in duration-500">
-                    <div className="p-6 bg-slate-50 rounded-xl border border-slate-200 prose prose-purple max-w-none text-sm leading-relaxed whitespace-pre-wrap">
-                      {rawAnalysis}
+                    <div className="relative">
+                      <button
+                        onClick={handleCopyAnalysis}
+                        className="absolute top-3 right-3 p-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 transition-colors"
+                        title="Copy to clipboard"
+                      >
+                        {copied ? (
+                          <Check className="w-4 h-4 text-green-500" />
+                        ) : (
+                          <Copy className="w-4 h-4 text-slate-500" />
+                        )}
+                      </button>
+                      <div className="p-6 pr-14 bg-slate-50 rounded-xl border border-slate-200 prose prose-purple max-w-none text-sm leading-relaxed whitespace-pre-wrap">
+                        {rawAnalysis}
+                      </div>
                     </div>
                   </div>
                 ) : (

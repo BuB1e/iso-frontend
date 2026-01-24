@@ -94,6 +94,14 @@ export default function Dashboard() {
     }
   }, [isoAssessments, setAllYears]);
 
+  // Set page title
+  useEffect(() => {
+    document.title = "Dashboard | ISO Portal";
+    return () => {
+      document.title = "ISO Portal";
+    };
+  }, []);
+
   if (!currentUser) {
     return <div>Loading...</div>;
   }

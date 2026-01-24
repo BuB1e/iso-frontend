@@ -67,6 +67,14 @@ export default function SettingsPage() {
     }
   }, [actionData, reset, currentUser, loadProfile]);
 
+  // Set page title
+  useEffect(() => {
+    document.title = "Settings | ISO Portal";
+    return () => {
+      document.title = "ISO Portal";
+    };
+  }, []);
+
   if (!currentUser) {
     return <div>Loading...</div>;
   }
@@ -148,7 +156,9 @@ export default function SettingsPage() {
           </div>
 
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium text-slate-700">Email (Cannot be changed)</label>
+            <label className="text-sm font-medium text-slate-700">
+              Email (Cannot be changed)
+            </label>
             <input
               type="email"
               name="email"
