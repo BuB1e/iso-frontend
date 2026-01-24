@@ -30,6 +30,7 @@ import {
   Copy,
   Check,
 } from "lucide-react";
+import Markdown from "react-markdown";
 
 import { PageHeader } from "~/components/ui/pageHeader";
 import { StatusBadge } from "~/components/ui/statusBadge";
@@ -853,8 +854,10 @@ export default function DomainControl() {
                           <Copy className="w-4 h-4 text-slate-500" />
                         )}
                       </button>
-                      <div className="p-6 pr-14 bg-slate-50 rounded-xl border border-slate-200 prose prose-purple max-w-none text-sm leading-relaxed whitespace-pre-wrap">
-                        {rawAnalysis}
+                      <div className="p-6 pr-14 bg-slate-50 rounded-xl border border-slate-200">
+                        <div className="prose prose-sm prose-slate max-w-none prose-headings:text-slate-800 prose-p:text-slate-600 prose-li:text-slate-600 prose-strong:text-slate-800 prose-code:text-main-blue prose-code:bg-blue-50 prose-code:px-1 prose-code:rounded prose-code:before:content-none prose-code:after:content-none">
+                          <Markdown>{rawAnalysis}</Markdown>
+                        </div>
                       </div>
                     </div>
                   </div>
