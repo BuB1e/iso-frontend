@@ -147,15 +147,22 @@ export default function Evidence() {
     setUploadError(null);
 
     try {
+      // Rename file to include controlId
+      const parts = file.name.split(".");
+      const ext = parts.length > 1 ? `.${parts.pop()}` : "";
+      const baseName = parts.join(".");
+      const newFileName = `${baseName}_${uploadControlId}${ext}`;
+      const renamedFile = new File([file], newFileName, { type: file.type });
+
       // 1. Upload to Supabase
-      const result = await uploadToSupabase(file, "evidence");
+      const result = await uploadToSupabase(renamedFile, "evidence");
       if (!result) {
         throw new Error("Failed to upload file to storage");
       }
 
       // 2. Save metadata to backend
       const evidence = await EvidenceService.createEvidence({
-        fileName: file.name,
+        fileName: newFileName,
         filePath: result.url,
         controlId: uploadControlId,
       });

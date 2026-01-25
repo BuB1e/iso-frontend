@@ -30,10 +30,6 @@ export class SuggestionService {
     try {
       const response = await axios.get(`${this.API_URL}/control/${controlId}`);
       const data: any = await response.data;
-      console.log(
-        `[SuggestionService] Control ${controlId} data:`,
-        JSON.stringify(data, null, 2),
-      );
       if (Array.isArray(data)) {
         return data[0] || null;
       }
