@@ -10,16 +10,39 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(supabaseUrl || "", supabaseAnonKey || "");
 
+// Generate unique filename to avoid collisions
+async function getUniquePath(bucket: string, fileName: string) {
+  const safeName = fileName.replace(/[^a-zA-Z0-9.-]/g, "_");
+  const parts = safeName.split(".");
+  const ext = parts.length > 1 ? `.${parts.pop()}` : "";
+  const name = parts.join(".");
+
+  const { data: files } = await supabase.storage.from(bucket).list("", {
+    limit: 100,
+    search: name,
+  });
+
+  const existingFiles = new Set(files?.map((f) => f.name));
+
+  if (!existingFiles.has(safeName)) {
+    return safeName;
+  }
+
+  let counter = 2;
+  while (existingFiles.has(`${name}-${counter}${ext}`)) {
+    counter++;
+  }
+
+  return `${name}-${counter}${ext}`;
+}
+
 // Helper to upload file to Supabase storage
 export async function uploadToSupabase(
   file: File,
   bucket: string = "evidence",
 ): Promise<{ url: string; path: string } | null> {
   try {
-    // Create unique filename with timestamp
-    const timestamp = Date.now();
-    const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
-    const path = `${timestamp}_${safeName}`;
+    const path = await getUniquePath(bucket, file.name);
 
     // Upload file
     const { data, error } = await supabase.storage
@@ -54,7 +77,6 @@ export async function deleteFromSupabase(
 ): Promise<boolean> {
   try {
     // Extract the file path from the full URL
-    // URL format: https://xxx.supabase.co/storage/v1/object/public/bucket/filename
     const urlParts = fileUrl.split(`/storage/v1/object/public/${bucket}/`);
     if (urlParts.length !== 2) {
       console.error("Could not extract file path from URL:", fileUrl);

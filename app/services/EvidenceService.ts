@@ -18,8 +18,12 @@ export class EvidenceService {
       const response = await axios.post(`${this.API_URL}/`, body);
       const data: EvidenceResponseDto = await response.data;
       return data;
-    } catch (error) {
-      console.error("Error :", error);
+    } catch (error: any) {
+      console.error("Create Evidence Error:", {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+      });
       return null;
     }
   }
