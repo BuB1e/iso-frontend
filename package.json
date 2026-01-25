@@ -17,6 +17,7 @@
     "@react-router/serve": "^7.9.2",
     "@supabase/supabase-js": "^2.91.1",
     "@tanstack/react-table": "^8.21.3",
+    "@vercel/react-router": "^1.2.5",
     "axios": "^1.13.2",
     "better-auth": "^1.4.17",
     "class-variance-authority": "^0.7.1",
