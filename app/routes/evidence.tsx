@@ -25,7 +25,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
-  Image,
   X,
   FileImage,
   Loader2,

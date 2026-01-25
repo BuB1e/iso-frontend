@@ -5,7 +5,6 @@ import {
   useSubmit,
   useNavigation,
   useFetcher,
-  Form,
   Link,
   useParams,
 } from "react-router";
@@ -14,18 +13,14 @@ import {
   ArrowLeft,
   Save,
   Upload,
-  ExternalLink,
   FileText,
-  FileSpreadsheet,
   Download,
   Trash2,
   Sparkles,
   AlertTriangle,
   CheckCircle2,
-  Clock,
   CheckCircle,
   XCircle,
-  ChevronRight,
   Loader2,
   Copy,
   Check,
@@ -34,14 +29,7 @@ import Markdown from "react-markdown";
 
 import { PageHeader } from "~/components/ui/pageHeader";
 import { StatusBadge } from "~/components/ui/statusBadge";
-import {
-  ControlStatus,
-  ControlsType,
-  controlStatusConfig,
-  controlsTypeColorMap,
-  controlsTypeDomainMap,
-  UserRole,
-} from "~/types";
+import { ControlStatus, controlStatusConfig, UserRole } from "~/types";
 import {
   useUserStore,
   useCanEditImplementation,
@@ -56,12 +44,8 @@ import {
   AssessmentControlService,
   IsoAssessmentService,
 } from "~/services";
-import { uploadToSupabase } from "~/lib/supabase";
-import type {
-  EvidenceResponseDto,
-  SuggestionResponseDto,
-  LlmSuggestRequest,
-} from "~/dto";
+import { uploadToSupabase, deleteFromSupabase } from "~/lib/supabase";
+import type { EvidenceResponseDto, SuggestionResponseDto } from "~/dto";
 
 // Enums
 enum Tab {
@@ -504,7 +488,6 @@ export default function DomainControl() {
     try {
       // 1. Delete from Supabase storage (if it's a Supabase URL)
       if (evidence.filePath && evidence.filePath.includes("supabase.co")) {
-        const { deleteFromSupabase } = await import("~/lib/supabase");
         await deleteFromSupabase(evidence.filePath, "evidence");
       }
 
