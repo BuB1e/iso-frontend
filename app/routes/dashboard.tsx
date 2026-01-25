@@ -238,7 +238,16 @@ export default function Dashboard() {
 
   // 4. External Expert
   if (currentUser.role === UserRole.EXTERNAL_EXPERT) {
-    return <ExternalExpertDashboard companies={companies} />;
+    return (
+      <ExternalExpertDashboard
+        companies={companies}
+        isoAssessments={isoAssessments}
+        controls={controls}
+        assessmentControls={
+          assessmentControls as unknown as TAssessmentControl[]
+        }
+      />
+    );
   }
 
   return <div className="p-8">Unknown Role Config</div>;
@@ -443,83 +452,82 @@ function InternalExpertDashboard({
 }
 
 // ============ EXTERNAL EXPERT DASHBOARD ============
-function ExternalExpertDashboard({ companies }: { companies: any[] }) {
-  // Demo: Show all companies as "Assigned" since no assignment logic YES
-  const assigned = companies.map((c) => ({
-    ...c,
-    pendingReviews: 0, // No real review data
-    lastReview: "Never",
-    progress: 0, // Would need to fetch stats for each company
-  }));
+function ExternalExpertDashboard({
+  companies,
+  isoAssessments,
+  controls,
+  assessmentControls,
+}: {
+  companies: any[];
+  isoAssessments: any[];
+  controls: TControl[];
+  assessmentControls: any[];
+}) {
+  const currentUser = useUserStore((state) => state.currentUser);
+  const { currentYear } = useYearStore();
 
+  // External Expert sees only their assigned company
+  const assignedCompanyId = currentUser?.companyId;
+  const assignedCompany = companies.find((c) => c.id === assignedCompanyId);
+
+  // If no company assigned, show empty state
+  if (!assignedCompany) {
+    return (
+      <div className="flex flex-col min-h-screen py-8 px-8 lg:px-16 bg-slate-50/50 gap-6">
+        <PageHeader
+          title="Reviewer Dashboard"
+          description="View your assigned company's compliance status"
+          icon={Star}
+        />
+        <div className="bg-white rounded-xl p-12 border border-slate-200 text-center">
+          <Building2 className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-slate-700 mb-2">
+            No Company Assigned
+          </h3>
+          <p className="text-slate-500 max-w-md mx-auto">
+            You have not been assigned to a company yet. Please contact your
+            administrator to be assigned to a company for review.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Filter data for assigned company only
+  // 1. Find assessments for this company in current year
+  const companyAssessments = isoAssessments.filter(
+    (a) => a.companyId === assignedCompanyId && a.year === currentYear,
+  );
+  const assessmentIds = companyAssessments.map((a) => a.id);
+
+  // 2. Find assessment controls
+  const companyAssessmentControls = assessmentControls.filter((ac) =>
+    assessmentIds.includes(ac.isoAssessmentId),
+  );
+  const assessmentControlIds = companyAssessmentControls.map((ac) => ac.id);
+
+  // 3. Get controls for this company
+  const companyControls = controls.filter((c) =>
+    assessmentControlIds.includes(c.assessmentControlId),
+  );
+
+  // 4. Show same dashboard as Internal Expert
   return (
     <div className="flex flex-col min-h-screen py-8 px-8 lg:px-16 bg-slate-50/50 gap-6">
       <PageHeader
-        title="Reviewer Dashboard"
-        description="Manage your assigned companies and pending reviews"
+        title={`${assignedCompany.name} - Compliance Dashboard`}
+        description={`Reviewing ${currentYear} ISO 27001 compliance status`}
         icon={Star}
       />
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        <StatCard
-          icon={Building2}
-          label="Assigned Companies"
-          value={assigned.length}
-          color="blue"
-        />
-        <StatCard
-          icon={Clock}
-          label="Pending Reviews"
-          value={0}
-          color="yellow"
-        />
-        <StatCard
-          icon={CheckCircle}
-          label="Completed This Month"
-          value={0}
-          color="green"
-        />
-      </div>
-
-      {/* Assigned Companies */}
-      <div className="bg-white rounded-xl p-6 border border-slate-200">
-        <SectionHeader title="Assigned Companies" />
-        {assigned.length > 0 ? (
-          <div className="grid grid-cols-3 gap-4 mt-4">
-            {assigned.map((company) => (
-              <Link
-                key={company.id}
-                to="/assessment/overview"
-                className="p-4 border border-slate-200 rounded-xl hover:shadow-lg hover:border-main-blue/50 transition-all"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-slate-800">
-                    {company.name}
-                  </h3>
-                </div>
-                <div className="mb-2">
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-slate-500">Progress</span>
-                    <span className="font-medium text-slate-700">0%</span>
-                  </div>
-                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-main-blue rounded-full"
-                      style={{ width: "0%" }}
-                    />
-                  </div>
-                </div>
-                <p className="text-xs text-slate-400">
-                  Last review: {company.lastReview}
-                </p>
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <p className="text-slate-500 text-sm mt-4">No companies assigned.</p>
-        )}
-      </div>
+      {/* Reuse Internal Expert Dashboard content */}
+      <InternalExpertDashboard
+        controls={companyControls}
+        assessmentControls={
+          companyAssessmentControls as unknown as TAssessmentControl[]
+        }
+        hideHeader={true}
+      />
     </div>
   );
 }
