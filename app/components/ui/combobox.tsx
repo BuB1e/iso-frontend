@@ -18,44 +18,55 @@ import {
 } from "~/components/ui/popover";
 import { useYearStore } from "~/stores/yearStore";
 
-const years = [
-  {
-    value: 2022,
-    label: "2022",
-  },
-  {
-    value: 2023,
-    label: "2023",
-  },
-  {
-    value: 2024,
-    label: "2024",
-  },
-  {
-    value: 2025,
-    label: "2025",
-  },
-  {
-    value: 2026,
-    label: "2026",
-  },
-];
+import { useNavigate, useRevalidator } from "react-router";
+import { Plus } from "lucide-react";
+import { IsoAssessmentService } from "~/services";
+import { useUserStore } from "~/stores/userStore";
+import { useAdminStore } from "~/stores/adminStore";
+import { UserRole } from "~/types";
 
 export function TopbarYearCombobox() {
   const { currentYear, setCurrentYear, allYears } = useYearStore();
   const [open, setOpen] = React.useState(false);
+  const revalidator = useRevalidator();
+  const navigate = useNavigate();
 
-  // Use dynamic years from store, or fallback/default if empty
-  // Assuming allYears is populated by the app (e.g. dashboard loader)
-  // If empty, we might want to show at least current year or a default range
+  const currentUser = useUserStore((state) => state.currentUser);
+  const { selectedCompanyId } = useAdminStore();
+
+  // Determine target company ID
+  const targetCompanyId =
+    currentUser?.role === UserRole.ADMIN
+      ? selectedCompanyId
+      : currentUser?.companyId;
+
+  // Calculate next year
+  const nextYear =
+    allYears.length > 0 ? Math.max(...allYears) + 1 : new Date().getFullYear();
+
+  const handleCreateYear = async () => {
+    if (!targetCompanyId) return;
+
+    const newAssessment = await IsoAssessmentService.createIsoAssessment({
+      name: `ISO 27001:2022 Assessment ${nextYear}`,
+      year: nextYear,
+      companyId: targetCompanyId,
+    });
+
+    if (newAssessment) {
+      // Refresh data to update store and UI
+      await revalidator.revalidate();
+      setCurrentYear(nextYear);
+      setOpen(false);
+    }
+  };
+
+  // Use dynamic years from store
   const displayYears =
     allYears.length > 0
       ? allYears.map((y) => ({ value: y, label: y.toString() }))
-      : [
-          { value: 2024, label: "2024" },
-          { value: 2025, label: "2025" },
-          { value: 2026, label: "2026" },
-        ];
+      : [];
+  // If empty, we show no options (or current year if added to store)
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -100,6 +111,23 @@ export function TopbarYearCombobox() {
                 </CommandItem>
               ))}
             </CommandGroup>
+            {/* Create New Year Button - Hide for External Experts */}
+            {targetCompanyId &&
+              currentUser?.role !== UserRole.EXTERNAL_EXPERT && (
+                <>
+                  <div className="h-px bg-slate-200 my-1" />
+                  <CommandGroup>
+                    <CommandItem
+                      value={`create-${nextYear}`}
+                      onSelect={handleCreateYear}
+                      className="text-main-blue font-medium cursor-pointer"
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Create {nextYear}
+                    </CommandItem>
+                  </CommandGroup>
+                </>
+              )}
           </CommandList>
         </Command>
       </PopoverContent>
