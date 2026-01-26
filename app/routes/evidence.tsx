@@ -36,7 +36,7 @@ import {
   IsoAssessmentService,
 } from "~/services";
 import type { EvidenceResponseDto } from "~/dto";
-import { useUserStore } from "~/stores/userStore";
+import { useUserStore, useCanEditImplementation } from "~/stores/userStore";
 import { useAdminStore } from "~/stores/adminStore";
 import { useYearStore } from "~/stores/yearStore";
 import { UserRole } from "~/types";
@@ -124,6 +124,7 @@ export default function Evidence() {
   const { currentYear } = useYearStore();
   const currentUser = useUserStore((state) => state.currentUser);
   const { selectedCompanyId } = useAdminStore();
+  const canEdit = useCanEditImplementation();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -310,13 +311,15 @@ export default function Evidence() {
             Central repository for all compliance evidence
           </p>
         </div>
-        <button
-          onClick={() => setIsUploadModalOpen(true)}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors shadow-sm"
-        >
-          <Upload className="w-4 h-4" />
-          Upload New Evidence
-        </button>
+        {canEdit && (
+          <button
+            onClick={() => setIsUploadModalOpen(true)}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors shadow-sm"
+          >
+            <Upload className="w-4 h-4" />
+            Upload New Evidence
+          </button>
+        )}
       </div>
 
       {/* Search Bar */}
@@ -408,27 +411,29 @@ export default function Evidence() {
                       >
                         <Download className="w-4 h-4" />
                       </a>
-                      <Form method="post">
-                        <input type="hidden" name="intent" value="delete" />
-                        <input type="hidden" name="id" value={evidence.id} />
-                        <input
-                          type="hidden"
-                          name="filePath"
-                          value={evidence.filePath}
-                        />
-                        <button
-                          type="submit"
-                          disabled={isDeleting}
-                          className="p-2 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-500 transition-colors disabled:opacity-50"
-                          title="Delete"
-                          onClick={(e) => {
-                            if (!confirm("Delete this evidence?"))
-                              e.preventDefault();
-                          }}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </Form>
+                      {canEdit && (
+                        <Form method="post">
+                          <input type="hidden" name="intent" value="delete" />
+                          <input type="hidden" name="id" value={evidence.id} />
+                          <input
+                            type="hidden"
+                            name="filePath"
+                            value={evidence.filePath}
+                          />
+                          <button
+                            type="submit"
+                            disabled={isDeleting}
+                            className="p-2 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-500 transition-colors disabled:opacity-50"
+                            title="Delete"
+                            onClick={(e) => {
+                              if (!confirm("Delete this evidence?"))
+                                e.preventDefault();
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </Form>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -533,7 +538,7 @@ export default function Evidence() {
       )}
 
       {/* Upload Modal */}
-      {isUploadModalOpen && (
+      {isUploadModalOpen && canEdit && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
           onClick={() => {
