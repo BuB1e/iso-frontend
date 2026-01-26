@@ -262,8 +262,6 @@ function AdminDashboard({
   const stats = {
     totalCompanies: companies.length,
     totalUsers: users.length,
-    totalAssessments: isoAssessments.length,
-    pendingReviews: 0, // No review service yet
   };
 
   return (
@@ -275,7 +273,7 @@ function AdminDashboard({
       />
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-4">
         <StatCard
           icon={Building2}
           label="Total Companies"
@@ -287,18 +285,6 @@ function AdminDashboard({
           label="Total Users"
           value={stats.totalUsers}
           color="green"
-        />
-        <StatCard
-          icon={FileText}
-          label="Assessments"
-          value={stats.totalAssessments}
-          color="purple"
-        />
-        <StatCard
-          icon={Clock}
-          label="Pending Reviews"
-          value={stats.pendingReviews}
-          color="yellow"
         />
       </div>
 
