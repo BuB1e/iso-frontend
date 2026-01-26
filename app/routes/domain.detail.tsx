@@ -134,12 +134,6 @@ export default function DomainDetail() {
   const implemented = filteredControls.filter(
     (c) => c.status === ControlStatus.IMPLEMENTED,
   ).length;
-  // const partial = filteredControls.filter(
-  //   (c) => c.status === ControlStatus.PARTIALLY,
-  // ).length; // Unused variable
-  // const notImplemented = filteredControls.filter(
-  //   (c) => c.status === ControlStatus.NOT_IMPLEMENTED,
-  // ).length; // Unused variable
 
   // Create assessment control context for the ControlItem component (for current year)
   // We need the assessment control object for the item type.
