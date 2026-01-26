@@ -18,13 +18,13 @@ export interface ControlResponseDto {
 export interface CreateControlDto {
 	code: string;
 	name: string;
-	currentPractice: string;
 	description: string;
-	userContext?: string;
-	evidenceDescription?: string;
 	guidance: string;
 	assessmentControlId: number;
-	status:	 ControlStatus;
+	status?: ControlStatus;
+	currentPractice?: string;
+	userContext?: string;
+	evidenceDescription?: string;
 }
 
 export interface UpdateControlDto {

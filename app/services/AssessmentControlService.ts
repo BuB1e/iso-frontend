@@ -19,4 +19,15 @@ export class AssessmentControlService {
       return [];
     }
   }
+
+  public static async getAllByIsoAssessmentId(id: number): Promise<AssessmentControlResponseDto[]> {
+    try {
+      const response = await axios.get(`${this.API_URL}/getAllByIsoAssessmentId/${id}`);
+      const data: AssessmentControlResponseDto[] = await response.data;
+      return data;
+    } catch (error) {
+      console.error("Error :", error);
+      return [];
+    }
+  }
 }

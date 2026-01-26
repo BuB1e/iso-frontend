@@ -23,6 +23,17 @@ export class ControlService {
     }
   }
 
+  public static async getAllByAssessmentControlId(id: number): Promise<ControlResponseDto[]> {
+    try {
+      const response = await axios.get(`${this.API_URL}/getAllByAssessmentControlId/${id}`);
+      const data: ControlResponseDto[] = await response.data;
+      return data;
+    } catch (error) {
+      console.error("Error :", error);
+      return [];
+    }
+  }
+
   public static async getControlById(
     id: number,
   ): Promise<ControlResponseDto | null> {
