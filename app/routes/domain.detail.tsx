@@ -2,13 +2,7 @@ import { useLoaderData } from "react-router";
 import { useState, useEffect } from "react";
 import type { LoaderFunctionArgs } from "react-router";
 import { ControlItem } from "~/components/ui/controlItem";
-import {
-  ControlStatus,
-  ControlsType,
-  controlsTypeDomainMap,
-  controlsTypeNameMap,
-  UserRole,
-} from "~/types";
+import { ControlStatus, ControlsType, UserRole, Domains } from "~/types";
 import {
   ControlService,
   AssessmentControlService,
@@ -35,6 +29,9 @@ interface DomainControl extends ControlResponseDto {
 // Loader - fetch controls by domain
 export async function loader({ params }: LoaderFunctionArgs) {
   const domainNumber = params.domainNumber || "A5";
+
+  // Extract domain number directly from string (e.g., "A7" -> 7)
+  const domainNum = parseInt(domainNumber.replace("A", ""), 10) || 5;
   const domainType =
     domainNumberToType[domainNumber] || ControlsType.ORGANIZATION;
 
@@ -45,9 +42,7 @@ export async function loader({ params }: LoaderFunctionArgs) {
     IsoAssessmentService.getAllIsoAssessment(),
   ]);
 
-  // Initial filter by domain type prefix just to reduce payload if possible,
-  // but strict filtering by year must happen on client.
-  const domainNum = controlsTypeDomainMap[domainType];
+  // Filter by domain code prefix (A.5, A.6, A.7, A.8)
   const controls = allControls.filter((c: ControlResponseDto) =>
     c.code.startsWith(`A.${domainNum}`),
   );
@@ -93,9 +88,20 @@ export default function DomainDetail() {
   });
   const activeAssessmentIds = activeAssessments.map((a) => a.id);
 
-  // 2. Find assessment controls linked to active assessments
-  const activeAssessmentControls = assessmentControls.filter((ac) =>
-    activeAssessmentIds.includes(ac.isoAssessmentId),
+  // Map domain number to type string
+  const domainTypeMap: Record<string, string> = {
+    A5: "ORGANIZATION",
+    A6: "PEOPLE",
+    A7: "PHYSICAL",
+    A8: "TECHNOLOGICAL",
+  };
+  const expectedType = domainTypeMap[domainNumber] || "ORGANIZATION";
+
+  // 2. Find assessment controls linked to active assessments AND matching domain type
+  const activeAssessmentControls = assessmentControls.filter(
+    (ac) =>
+      activeAssessmentIds.includes(ac.isoAssessmentId) &&
+      String(ac.type) === expectedType,
   );
   const activeAssessmentControlIds = activeAssessmentControls.map(
     (ac) => ac.id,
@@ -111,8 +117,10 @@ export default function DomainDetail() {
       }),
     );
 
-  const domainName = controlsTypeNameMap[domainType as ControlsType];
-  const domainNum = controlsTypeDomainMap[domainType as ControlsType];
+  // Get domain info directly from Domains constant using domainNumber string
+  const domainInfo = Domains[domainNumber];
+  const domainName = domainInfo?.name || "Unknown Domain";
+  const domainNum = domainInfo?.number || 5;
 
   // Set page title
   useEffect(() => {
@@ -136,12 +144,14 @@ export default function DomainDetail() {
   // Create assessment control context for the ControlItem component (for current year)
   // We need the assessment control object for the item type.
   // We pick the first one matching the type for this year as they are redundant by type per assessment
+  // We need the assessment control object for the item type.
+  // We pick the first one matching the type for this year as they are redundant by type per assessment
   const currentAssessmentControl =
-    activeAssessmentControls.find((ac) => ac.type === domainType) ||
+    activeAssessmentControls.find((ac) => String(ac.type) === expectedType) ||
     ({
       id: 0,
       assessmentId: 0,
-      type: domainType as ControlsType,
+      type: expectedType, // Use string type matching expectation (e.g. "PHYSICAL")
       count: implemented,
       maxCount: filteredControls.length,
       description: domainName,

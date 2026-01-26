@@ -7,7 +7,6 @@ import {
   ControlsType,
   controlStatusConfig,
   controlsTypeColorMap,
-  controlsTypeDomainMap,
   type DomainColorKey,
 } from "~/types";
 
@@ -139,7 +138,21 @@ function AssessmentControlItem({
   domainType,
 }: AssessmentControlItemProps) {
   const { domainNumber } = useParams();
-  const colorKey = controlsTypeColorMap[domainType];
+
+  // Map string types from API to DomainColorKey
+  const typeColorMap: Record<string, DomainColorKey> = {
+    ORGANIZATION: "blue",
+    PEOPLE: "green",
+    PHYSICAL: "yellow",
+    TECHNOLOGICAL: "purple",
+  };
+
+  // Use string lookup if domainType is string, otherwise use enum lookup
+  const colorKey =
+    typeof domainType === "string"
+      ? typeColorMap[domainType] || "blue"
+      : controlsTypeColorMap[domainType];
+
   const colors = colorStyles[colorKey];
 
   return (
@@ -149,7 +162,7 @@ function AssessmentControlItem({
         flex flex-row justify-between items-center h-fit w-full py-3 px-4
         rounded-lg border shadow-sm
         hover:scale-[1.02] transition-all duration-75 hover:shadow-md cursor-pointer
-        bg-gradient-to-br from-white ${colors.gradient}
+        bg-linear-to-br from-white ${colors.gradient}
         ${colors.border}`}
     >
       {/* Control Info */}

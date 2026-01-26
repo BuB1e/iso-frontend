@@ -15,7 +15,6 @@ import { Link, useLoaderData } from "react-router";
 import { useEffect, useState } from "react";
 import { DashboardCard } from "~/components/ui/card";
 import { ControlItem } from "~/components/ui/controlItem";
-import { StatusBadge } from "~/components/ui/statusBadge";
 import { PageHeader, SectionHeader } from "~/components/ui/pageHeader";
 import {
   Modal,
