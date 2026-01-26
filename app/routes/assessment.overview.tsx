@@ -1,4 +1,5 @@
 import { useLoaderData } from "react-router";
+import { useState, useEffect } from "react";
 import { Domains, type TDomain, ControlStatus, UserRole } from "~/types";
 import { DomainCard, type DomainStats } from "~/components/ui/domainCard";
 import {
@@ -9,67 +10,101 @@ import {
 import { useYearStore } from "~/stores/yearStore";
 import { useUserStore } from "~/stores/userStore";
 import { useAdminStore } from "~/stores/adminStore";
+import { Loader2 } from "lucide-react";
+import type { ControlResponseDto } from "~/dto";
 
 export async function loader() {
-  // Fetch all necessary data to filter by year
-  const [controls, assessmentControls, isoAssessments] = await Promise.all([
-    ControlService.getAllControl(),
-    AssessmentControlService.getAllAssessmentControl(),
-    IsoAssessmentService.getAllIsoAssessment(),
-  ]);
-
-  return { controls, assessmentControls, isoAssessments };
+  // Only fetch assessments list
+  const isoAssessments = await IsoAssessmentService.getAllIsoAssessment();
+  return { isoAssessments };
 }
 
 export default function AssessmentOverview() {
-  const { controls, assessmentControls, isoAssessments } =
-    useLoaderData<typeof loader>();
+  const { isoAssessments } = useLoaderData<typeof loader>();
   const { currentYear } = useYearStore();
   const currentUser = useUserStore((state) => state.currentUser);
-
-  // Determine effective company filter
   const { selectedCompanyId } = useAdminStore();
-  const targetCompanyId =
-    currentUser?.role === UserRole.ADMIN
-      ? selectedCompanyId
-      : currentUser?.companyId;
 
-  // Filter controls by current year AND user's company
-  // 1. Find assessments for current year
-  const activeAssessments = isoAssessments.filter((a) => {
-    if (a.year !== currentYear) return false;
+  const [loading, setLoading] = useState(true);
+  const [controls, setControls] = useState<ControlResponseDto[]>([]);
 
-    // If no target company...
-    if (!targetCompanyId) {
-      // Admin Global View: Show all
-      if (currentUser?.role === UserRole.ADMIN) return true;
-      // Unassigned User: Show nothing
-      return false;
+  // Fetch Data Effect
+  useEffect(() => {
+    async function fetchData() {
+      setLoading(true);
+      try {
+        // 1. Determine target company
+        const targetCompanyId =
+          currentUser?.role === UserRole.ADMIN
+            ? selectedCompanyId
+            : currentUser?.companyId;
+
+        // 2. Find active assessment
+        const activeAssessment = isoAssessments.find((a) => {
+          if (a.year !== currentYear) return false;
+          if (!targetCompanyId) {
+            // Admin Global View: Show all (or first?)
+            // Logic in original was: if (!targetCompanyId) -> if Admin return true -> filter keeps all.
+            // Here we need ONE active assessment to fetch controls for?
+            // If Admin sees ALL companies, aggregating stats across companies is complex.
+            // Original: `const activeAssessments = isoAssessments.filter(...)`
+            // Then `activeAssessmentIds` map.
+            // Then `activeAssessmentControls` filter (IN ids).
+            // If so, we must support multiple assessments.
+            return currentUser?.role === UserRole.ADMIN;
+          }
+          return a.companyId === targetCompanyId;
+        });
+
+        // Wait, original logic supported MULTIPLE assessments (e.g. if Admin views global).
+        // Let's replicate this support.
+        const activeAssessments = isoAssessments.filter((a) => {
+          if (a.year !== currentYear) return false;
+          if (!targetCompanyId) {
+            if (currentUser?.role === UserRole.ADMIN) return true;
+            return false;
+          }
+          return a.companyId === targetCompanyId;
+        });
+
+        if (activeAssessments.length === 0) {
+          setControls([]);
+          return;
+        }
+
+        // 3. Fetch AssessmentControls for ALL active assessments
+        // Optimized: Fetch parallel
+        const allAcs = await Promise.all(
+          activeAssessments.map((a) =>
+            AssessmentControlService.getAllByIsoAssessmentId(a.id),
+          ),
+        );
+        const flattenedAcs = allAcs.flat();
+
+        // 4. Fetch Controls for ALL assessment controls
+        // This might be many requests if Admin view. But for single company (User view), it's just 4 requests.
+        const allControls = await Promise.all(
+          flattenedAcs.map((ac) =>
+            ControlService.getAllByAssessmentControlId(ac.id),
+          ),
+        );
+
+        setControls(allControls.flat());
+      } catch (error) {
+        console.error("Error fetching overview data", error);
+        setControls([]);
+      } finally {
+        setLoading(false);
+      }
     }
 
-    // Otherwise, filter by specific company
-    return a.companyId === targetCompanyId;
-  });
-  const activeAssessmentIds = activeAssessments.map((a) => a.id);
-
-  // 2. Find assessment controls linked to active assessments
-  const activeAssessmentControls = assessmentControls.filter((ac) =>
-    activeAssessmentIds.includes(ac.isoAssessmentId),
-  );
-  const activeAssessmentControlIds = activeAssessmentControls.map(
-    (ac) => ac.id,
-  );
-
-  // 3. Filter controls linked to active assessment controls
-  const filteredControls = controls.filter((c) =>
-    activeAssessmentControlIds.includes(c.assessmentControlId),
-  );
+    fetchData();
+  }, [currentYear, currentUser, selectedCompanyId, isoAssessments]);
 
   // Aggregate stats per domain using filtered controls
-  // Return keys to avoid serialization issues
   const domainsStats = Object.entries(Domains).map(([key, domain]) => {
     const domainPrefix = `A.${domain.number}`;
-    const domainControls = filteredControls.filter((c) =>
+    const domainControls = controls.filter((c) =>
       c.code.startsWith(domainPrefix),
     );
 
@@ -90,6 +125,14 @@ export default function AssessmentOverview() {
       stats,
     };
   });
+
+  if (loading && controls.length === 0) {
+    return (
+      <div className="flex justify-center items-center h-full py-20 w-full">
+        <Loader2 className="w-8 h-8 animate-spin text-main-blue opacity-50" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col w-full h-full justify-center items-center gap-4 py-8">

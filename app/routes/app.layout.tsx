@@ -18,7 +18,7 @@ export default function Layout() {
   const location = useLocation();
   const currentUser = useUserStore((state) => state.currentUser);
   const { assessments } = useLoaderData<typeof loader>();
-  const { setAllYears } = useYearStore();
+  const { setAllYears, currentYear, setCurrentYear } = useYearStore();
 
   const { selectedCompanyId } = useAdminStore();
 
@@ -42,10 +42,24 @@ export default function Layout() {
       ).sort((a, b) => a - b); // Ascending sort
 
       setAllYears(uniqueYears);
+
+      // Validate currentYear against new list
+      // If currentYear is NOT in the new list, switch to the latest year
+      if (uniqueYears.length > 0 && !uniqueYears.includes(currentYear)) {
+        const latestYear = uniqueYears[uniqueYears.length - 1];
+        setCurrentYear(latestYear);
+      }
     } else {
       setAllYears([]);
     }
-  }, [assessments, currentUser, selectedCompanyId, setAllYears]);
+  }, [
+    assessments,
+    currentUser,
+    selectedCompanyId,
+    setAllYears,
+    currentYear,
+    setCurrentYear,
+  ]);
 
   useEffect(() => {
     // If user is loaded, not admin, and has no company => restrict access

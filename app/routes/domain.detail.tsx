@@ -8,10 +8,15 @@ import {
   AssessmentControlService,
   IsoAssessmentService,
 } from "~/services";
-import type { ControlResponseDto } from "~/dto";
+import type {
+  ControlResponseDto,
+  AssessmentControlResponseDto,
+  IsoAssessmentResponseDto,
+} from "~/dto";
 import { useYearStore } from "~/stores/yearStore";
 import { useUserStore } from "~/stores/userStore";
 import { useAdminStore } from "~/stores/adminStore";
+import { Loader2 } from "lucide-react";
 
 // Map domain number to ControlsType
 const domainNumberToType: Record<string, ControlsType> = {
@@ -21,72 +26,35 @@ const domainNumberToType: Record<string, ControlsType> = {
   A8: ControlsType.TECHNOLOGICAL,
 };
 
-// Extended interface for component compatibility
-interface DomainControl extends ControlResponseDto {
-  [key: string]: unknown;
-}
-
-// Loader - fetch controls by domain
+// Loader - only fetch lightweight assessment list
 export async function loader({ params }: LoaderFunctionArgs) {
   const domainNumber = params.domainNumber || "A5";
 
-  // Extract domain number directly from string (e.g., "A7" -> 7)
-  const domainNum = parseInt(domainNumber.replace("A", ""), 10) || 5;
-  const domainType =
-    domainNumberToType[domainNumber] || ControlsType.ORGANIZATION;
-
-  // Fetch all data for filtering
-  const [allControls, assessmentControls, isoAssessments] = await Promise.all([
-    ControlService.getAllControl(),
-    AssessmentControlService.getAllAssessmentControl(),
-    IsoAssessmentService.getAllIsoAssessment(),
-  ]);
-
-  // Filter by domain code prefix (A.5, A.6, A.7, A.8)
-  const controls = allControls.filter((c: ControlResponseDto) =>
-    c.code.startsWith(`A.${domainNum}`),
-  );
+  // Fetch all assessments (lightweight) to determine context
+  const isoAssessments = await IsoAssessmentService.getAllIsoAssessment();
 
   return {
-    controls: controls as DomainControl[],
-    assessmentControls,
     isoAssessments,
     domainNumber,
-    domainType,
   };
 }
 
 export default function DomainDetail() {
-  const {
-    controls,
-    assessmentControls,
-    isoAssessments,
-    domainNumber,
-    domainType,
-  } = useLoaderData<typeof loader>();
+  const { isoAssessments, domainNumber } = useLoaderData<typeof loader>();
   const { currentYear } = useYearStore();
   const currentUser = useUserStore((state) => state.currentUser);
-  const [statusFilter, setStatusFilter] = useState<string>("ALL");
-
-  // Determine effective company filter
   const { selectedCompanyId } = useAdminStore();
-  const targetCompanyId =
-    currentUser?.role === UserRole.ADMIN
-      ? selectedCompanyId
-      : currentUser?.companyId;
 
-  // Filter controls by current year AND user's company
-  // 1. Find assessments for current year
-  const activeAssessments = isoAssessments.filter((a) => {
-    if (a.year !== currentYear) return false;
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [loading, setLoading] = useState(true);
+  const [controls, setControls] = useState<ControlResponseDto[]>([]);
+  const [currentAssessmentControl, setCurrentAssessmentControl] =
+    useState<AssessmentControlResponseDto | null>(null);
 
-    // If no target company (Global Admin View), show all
-    if (!targetCompanyId) return true;
-
-    // Otherwise, filter by specific company
-    return a.companyId === targetCompanyId;
-  });
-  const activeAssessmentIds = activeAssessments.map((a) => a.id);
+  // Extract domain info
+  const domainInfo = Domains[domainNumber];
+  const domainName = domainInfo?.name || "Unknown Domain";
+  const domainNum = domainInfo?.number || 5;
 
   // Map domain number to type string
   const domainTypeMap: Record<string, string> = {
@@ -97,30 +65,72 @@ export default function DomainDetail() {
   };
   const expectedType = domainTypeMap[domainNumber] || "ORGANIZATION";
 
-  // 2. Find assessment controls linked to active assessments AND matching domain type
-  const activeAssessmentControls = assessmentControls.filter(
-    (ac) =>
-      activeAssessmentIds.includes(ac.isoAssessmentId) &&
-      String(ac.type) === expectedType,
-  );
-  const activeAssessmentControlIds = activeAssessmentControls.map(
-    (ac) => ac.id,
-  );
+  // Effect to fetch specific data when context (year/company) changes
+  useEffect(() => {
+    async function fetchData() {
+      setLoading(true);
+      try {
+        // 1. Determine target company
+        const targetCompanyId =
+          currentUser?.role === UserRole.ADMIN
+            ? selectedCompanyId
+            : currentUser?.companyId;
 
-  // 3. Filter controls linked to active assessment controls AND sort by code (natural sort)
-  const filteredControls = controls
-    .filter((c) => activeAssessmentControlIds.includes(c.assessmentControlId))
-    .sort((a, b) =>
-      a.code.localeCompare(b.code, undefined, {
-        numeric: true,
-        sensitivity: "base",
-      }),
-    );
+        // 2. Find active assessment for this year & company
+        const activeAssessment = isoAssessments.find((a) => {
+          if (a.year !== currentYear) return false;
+          if (!targetCompanyId) return true; // Global admin view (might default to first found?)
+          return a.companyId === targetCompanyId;
+        });
 
-  // Get domain info directly from Domains constant using domainNumber string
-  const domainInfo = Domains[domainNumber];
-  const domainName = domainInfo?.name || "Unknown Domain";
-  const domainNum = domainInfo?.number || 5;
+        if (!activeAssessment) {
+          setControls([]);
+          setCurrentAssessmentControl(null);
+          return;
+        }
+
+        // 3. Fetch AssessmentControls for this assessment
+        const acs = await AssessmentControlService.getAllByIsoAssessmentId(
+          activeAssessment.id,
+        );
+
+        // 4. Find the specific AssessmentControl for this domain
+        const targetAc = acs.find((ac) => String(ac.type) === expectedType);
+
+        if (targetAc) {
+          setCurrentAssessmentControl(targetAc);
+          // 5. Fetch Controls for this AssessmentControl
+          const fetchedControls =
+            await ControlService.getAllByAssessmentControlId(targetAc.id);
+
+          // Sort naturally
+          fetchedControls.sort((a, b) =>
+            a.code.localeCompare(b.code, undefined, {
+              numeric: true,
+              sensitivity: "base",
+            }),
+          );
+          setControls(fetchedControls);
+        } else {
+          setControls([]);
+          setCurrentAssessmentControl(null);
+        }
+      } catch (error) {
+        console.error("Failed to fetch domain data", error);
+        setControls([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchData();
+  }, [
+    currentYear,
+    currentUser,
+    selectedCompanyId,
+    isoAssessments,
+    expectedType,
+  ]);
 
   // Set page title
   useEffect(() => {
@@ -130,30 +140,10 @@ export default function DomainDetail() {
     };
   }, [domainNum, domainName]);
 
-  // Calculate progress stats based on filtered controls
-  const implemented = filteredControls.filter(
+  // Calculate stats
+  const implemented = controls.filter(
     (c) => c.status === ControlStatus.IMPLEMENTED,
   ).length;
-
-  // Create assessment control context for the ControlItem component (for current year)
-  // We need the assessment control object for the item type.
-  // We pick the first one matching the type for this year as they are redundant by type per assessment
-  // We need the assessment control object for the item type.
-  // We pick the first one matching the type for this year as they are redundant by type per assessment
-  const currentAssessmentControl =
-    activeAssessmentControls.find((ac) => String(ac.type) === expectedType) ||
-    ({
-      id: 0,
-      assessmentId: 0,
-      type: expectedType, // Use string type matching expectation (e.g. "PHYSICAL")
-      count: implemented,
-      maxCount: filteredControls.length,
-      description: domainName,
-    } as any); // Fallback or partial mock if no year match
-
-  // But ControlItem needs SPECIFIC assessment control for each item?
-  // Actually ControlItem uses assessmentControl.type mostly.
-  // And links.
 
   return (
     <div className="flex flex-col gap-6 w-full">
@@ -183,9 +173,8 @@ export default function DomainDetail() {
               <span className="w-3 h-3 rounded-full bg-yellow-500"></span>
               <span className="text-sm text-slate-600">
                 {
-                  filteredControls.filter(
-                    (c) => c.status === ControlStatus.PARTIALLY,
-                  ).length
+                  controls.filter((c) => c.status === ControlStatus.PARTIALLY)
+                    .length
                 }{" "}
                 Partially
               </span>
@@ -194,7 +183,7 @@ export default function DomainDetail() {
               <span className="w-3 h-3 rounded-full bg-gray-300"></span>
               <span className="text-sm text-slate-600">
                 {
-                  filteredControls.filter(
+                  controls.filter(
                     (c) => c.status === ControlStatus.NOT_IMPLEMENTED,
                   ).length
                 }{" "}
@@ -223,16 +212,23 @@ export default function DomainDetail() {
 
       {/* Controls List */}
       <div className="flex flex-col gap-3">
-        {filteredControls.filter(
-          (c) => statusFilter === "ALL" || c.status === statusFilter,
-        ).length > 0 ? (
-          filteredControls
+        {loading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-main-blue opacity-50" />
+          </div>
+        ) : controls.length > 0 ? (
+          controls
             .filter((c) => statusFilter === "ALL" || c.status === statusFilter)
             .map((control) => (
               <ControlItem
-                key={control.id} // Use ID as key, not code, since codes assume uniqueness but filtering ensures one per year
+                key={control.id}
                 control={control}
-                assessmentControl={currentAssessmentControl}
+                assessmentControl={
+                  currentAssessmentControl ||
+                  ({
+                    type: expectedType, // Fallback for color mapping
+                  } as any)
+                }
               />
             ))
         ) : (

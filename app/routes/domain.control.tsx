@@ -77,45 +77,9 @@ function simpleDate(dateStr: string | Date | undefined) {
 
 // Loader
 export async function loader({ params }: LoaderFunctionArgs) {
-  const { controlNumber } = params;
-
-  // Fetch all necessary data to handle year filtering client-side
-  const [allControls, allEvidence, assessmentControls, isoAssessments] =
-    await Promise.all([
-      ControlService.getAllControl(),
-      EvidenceService.getAllEvidence(),
-      AssessmentControlService.getAllAssessmentControl(),
-      IsoAssessmentService.getAllIsoAssessment(),
-    ]);
-
-  // Candidates: all controls matching this code (e.g. A.5.1 for 2025, 2026)
-  const candidates = allControls.filter((c) => c.code === controlNumber);
-
-  if (candidates.length === 0) {
-    throw new Response("Control Not Found", { status: 404 });
-  }
-
-  // Domain controls: fetch all controls in this domain prefix (e.g. A.5) to calculate stats client-side
-  // We use the first candidate to determine prefix
-  const prefix = candidates[0].code.split(".").slice(0, 2).join(".");
-  const domainControls = allControls.filter((c) => c.code.startsWith(prefix));
-
-  // Fetch suggestions for candidates
-  const suggestions = await Promise.all(
-    candidates.map(async (c) => ({
-      controlId: c.id,
-      suggestion: await SuggestionService.getSuggestionByControlId(c.id),
-    })),
-  );
-
-  return {
-    candidates,
-    domainControls,
-    allEvidence,
-    assessmentControls,
-    isoAssessments,
-    suggestions,
-  };
+  // Only fetch assessments list to determine context
+  const isoAssessments = await IsoAssessmentService.getAllIsoAssessment();
+  return { isoAssessments };
 }
 
 // Action
@@ -205,14 +169,7 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function DomainControl() {
-  const {
-    candidates,
-    domainControls,
-    allEvidence,
-    assessmentControls,
-    isoAssessments,
-    suggestions,
-  } = useLoaderData<typeof loader>();
+  const { isoAssessments } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const submit = useSubmit();
   const navigation = useNavigation();
@@ -223,23 +180,39 @@ export default function DomainControl() {
 
   const { currentYear } = useYearStore();
   const params = useParams();
+  const controlNumber = params.controlNumber; // e.g. "A.5.1"
   const currentUser = useUserStore((state) => state.currentUser);
   const canEdit = useCanEditImplementation();
   const canReview = useCanSubmitReview();
 
-  // Helper to map status to badge variant
-  const getStatusVariant = (s: ControlStatus) => {
-    switch (s) {
-      case ControlStatus.IMPLEMENTED:
-        return "success";
-      case ControlStatus.PARTIALLY:
-        return "warning";
-      case ControlStatus.NOT_IMPLEMENTED:
-        return "error";
-      default:
-        return "default";
-    }
-  };
+  // State
+  const [loading, setLoading] = useState(true);
+  const [control, setControl] = useState<any>(null);
+  const [stats, setStats] = useState({
+    total: 0,
+    implemented: 0,
+    percentage: 0,
+  });
+  const [evidences, setEvidences] = useState<EvidenceResponseDto[]>([]);
+  const [suggestion, setSuggestion] = useState<SuggestionResponseDto | null>(
+    null,
+  );
+
+  // UI State
+  const [activeTab, setActiveTab] = useState<Tab>(Tab.Implementation);
+  const [isDirty, setIsDirty] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const evidenceInputRef = useRef<HTMLInputElement>(null);
+
+  // Form State
+  const [status, setStatus] = useState<ControlStatus>(
+    ControlStatus.NOT_IMPLEMENTED,
+  );
+  const [currentPractice, setCurrentPractice] = useState("");
+  const [evidenceDescription, setEvidenceDescription] = useState("");
+  const [context, setContext] = useState("");
+
+  const [copied, setCopied] = useState(false);
 
   // Determine effective company filter
   const { selectedCompanyId } = useAdminStore();
@@ -248,57 +221,113 @@ export default function DomainControl() {
       ? selectedCompanyId
       : currentUser?.companyId;
 
-  // Determine active control based on current year AND user's company
-  const activeAssessments = isoAssessments.filter((a) => {
-    if (a.year !== currentYear) return false;
-
-    // If no target company (Global Admin View), show all
-    if (!targetCompanyId) return true;
-
-    // Otherwise, filter by specific company
-    return a.companyId === targetCompanyId;
-  });
-  const activeAssessmentIds = activeAssessments.map((a) => a.id);
-  const activeAssessmentControls = assessmentControls.filter((ac) =>
-    activeAssessmentIds.includes(ac.isoAssessmentId),
-  );
-  const activeAssessmentControlIds = activeAssessmentControls.map(
-    (ac) => ac.id,
-  );
-
-  // Find the candidate that belongs to the active assessment controls
-  // Fallback to first candidate if not found (e.g. year filter mismatch or data hole)
-  const control =
-    candidates.find((c) =>
-      activeAssessmentControlIds.includes(c.assessmentControlId),
-    ) || candidates[0];
-
-  // Calculate stats for CURRENT YEAR controls
-  // Filter domainControls by current year context
-  const currentYearDomainControls = domainControls.filter((c) =>
-    activeAssessmentControlIds.includes(c.assessmentControlId),
-  );
-
-  const stats = {
-    total: currentYearDomainControls.length,
-    implemented: currentYearDomainControls.filter(
-      (c) => c.status === ControlStatus.IMPLEMENTED,
-    ).length,
-    percentage: 0,
+  // Determine domain type from control number
+  const getDomainType = (code: string | undefined): string => {
+    if (!code) return "ORGANIZATION";
+    if (code.startsWith("A.5")) return "ORGANIZATION";
+    if (code.startsWith("A.6")) return "PEOPLE";
+    if (code.startsWith("A.7")) return "PHYSICAL";
+    if (code.startsWith("A.8")) return "TECHNOLOGICAL";
+    return "ORGANIZATION";
   };
-  stats.percentage =
-    stats.total > 0 ? Math.round((stats.implemented / stats.total) * 100) : 0;
+  const expectedType = getDomainType(controlNumber);
 
-  // Link related data to the active control
-  const evidences = allEvidence.filter((e) => e.controlId === control.id);
-  const suggestionEntry = suggestions.find((s) => s.controlId === control.id);
-  const suggestion = suggestionEntry?.suggestion || null;
+  // Fetch Data Effect
+  useEffect(() => {
+    async function fetchData() {
+      if (!controlNumber) return;
+      setLoading(true);
+      try {
+        // 1. Find active assessment
+        const activeAssessment = isoAssessments.find((a) => {
+          if (a.year !== currentYear) return false;
+          if (!targetCompanyId) return true;
+          return a.companyId === targetCompanyId;
+        });
 
-  // Determine effective suggestion (Action > Fetcher > Loader)
-  // Check if actionData has suggestion AND it matches current control (to avoid stale data from prev action if we didn't nav away? unlikely but safe)
+        if (!activeAssessment) {
+          setControl(null);
+          return;
+        }
+
+        // 2. Fetch AssessmentControls
+        const acs = await AssessmentControlService.getAllByIsoAssessmentId(
+          activeAssessment.id,
+        );
+        const targetAc = acs.find((ac) => String(ac.type) === expectedType);
+
+        if (targetAc) {
+          // 3. Fetch all controls in this domain (needed for stats and to find the current one)
+          const fetchedControls =
+            await ControlService.getAllByAssessmentControlId(targetAc.id);
+
+          // Calculate Stats
+          const newStats = {
+            total: fetchedControls.length,
+            implemented: fetchedControls.filter(
+              (c) => c.status === ControlStatus.IMPLEMENTED,
+            ).length,
+            percentage: 0,
+          };
+          newStats.percentage =
+            newStats.total > 0
+              ? Math.round((newStats.implemented / newStats.total) * 100)
+              : 0;
+          setStats(newStats);
+
+          // Find Target Control
+          const targetControl = fetchedControls.find(
+            (c) => c.code === controlNumber,
+          );
+
+          if (targetControl) {
+            setControl(targetControl);
+
+            // Sync form state
+            setStatus(targetControl.status);
+            setCurrentPractice(targetControl.currentPractice || "");
+            setEvidenceDescription(targetControl.evidenceDescription || "");
+            setContext(targetControl.userContext || "");
+            setIsDirty(false);
+
+            // 4. Fetch Evidence & Suggestion for this specific control
+            const [evData, suggestData] = await Promise.all([
+              EvidenceService.getAllEvidence(),
+              SuggestionService.getSuggestionByControlId(targetControl.id),
+            ]);
+
+            setEvidences(
+              evData.filter((e) => e.controlId === targetControl.id),
+            );
+            setSuggestion(suggestData);
+          } else {
+            setControl(null);
+          }
+        } else {
+          setControl(null);
+        }
+      } catch (error) {
+        console.error("Error loading control data", error);
+        setControl(null);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchData();
+  }, [
+    controlNumber,
+    currentYear,
+    currentUser,
+    selectedCompanyId,
+    isoAssessments,
+    expectedType,
+  ]);
+
+  // Determine effective suggestion (Action > Fetcher > Loaded)
   const actionSuggestion = (actionData as any)?.suggestion;
   const activeSuggestion =
-    (actionSuggestion && actionSuggestion.controlId === control.id
+    (actionSuggestion && control && actionSuggestion.controlId === control.id
       ? actionSuggestion
       : null) ||
     suggestionFetcher.data?.suggestion ||
@@ -316,9 +345,6 @@ export default function DomainControl() {
     }
   }
 
-  const [activeTab, setActiveTab] = useState<Tab>(Tab.Implementation);
-  const [isDirty, setIsDirty] = useState(false);
-
   // Fetch suggestion when AI Analysis tab is opened
   useEffect(() => {
     if (
@@ -329,40 +355,28 @@ export default function DomainControl() {
     ) {
       suggestionFetcher.load(`/api/suggestion/${control.id}`);
     }
-  }, [activeTab, control.id, suggestionFetcher]);
+  }, [activeTab, control?.id, suggestionFetcher]);
 
-  // Local state for form fields to support "dirty" check
-  const [status, setStatus] = useState(control.status);
-  const [currentPractice, setCurrentPractice] = useState(
-    control.currentPractice || "",
-  );
-  const [evidenceDescription, setEvidenceDescription] = useState(
-    control.evidenceDescription || "",
-  );
-  const [context, setContext] = useState(control.userContext || "");
+  // Check for dirty state
+  useEffect(() => {
+    if (!control) return;
+    const isChanged =
+      status !== control.status ||
+      currentPractice !== (control.currentPractice || "") ||
+      evidenceDescription !== (control.evidenceDescription || "") ||
+      context !== (control.userContext || "");
+    setIsDirty(isChanged);
+  }, [status, currentPractice, evidenceDescription, context, control]);
 
-  // Review state (local only, not persisted to backend)
-  const [reviewStatus, setReviewStatus] = useState<ReviewStatus>(
-    ReviewStatus.WAITING,
-  );
-  const [reviewerComments, setReviewerComments] = useState("");
-
-  // Copy to clipboard state
-  const [copied, setCopied] = useState(false);
-
-  const handleCopyAnalysis = async () => {
-    const textToCopy =
-      rawAnalysis || (aiAnalysis ? JSON.stringify(aiAnalysis, null, 2) : "");
-    if (!textToCopy) return;
-
-    try {
-      await navigator.clipboard.writeText(textToCopy);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error("Failed to copy:", err);
+  // Set page title
+  useEffect(() => {
+    if (control) {
+      document.title = `${control.code} ${control.name} | ISO Portal`;
     }
-  };
+    return () => {
+      document.title = "ISO Portal";
+    };
+  }, [control]);
 
   // Keyboard shortcut: Ctrl+S to save
   useEffect(() => {
@@ -379,34 +393,8 @@ export default function DomainControl() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [canEdit, isDirty, isSubmitting]);
 
-  // Update local state when active control changes (year change or navigation)
-  useEffect(() => {
-    setStatus(control.status);
-    setCurrentPractice(control.currentPractice || "");
-    setEvidenceDescription(control.evidenceDescription || "");
-    setContext(control.userContext || "");
-    setIsDirty(false);
-  }, [control]);
-
-  // Check for dirty state
-  useEffect(() => {
-    const isChanged =
-      status !== control.status ||
-      currentPractice !== (control.currentPractice || "") ||
-      evidenceDescription !== (control.evidenceDescription || "") ||
-      context !== (control.userContext || "");
-    setIsDirty(isChanged);
-  }, [status, currentPractice, evidenceDescription, context, control]);
-
-  // Set dynamic page title
-  useEffect(() => {
-    document.title = `${control.code} ${control.name} | ISO Portal`;
-    return () => {
-      document.title = "ISO Portal";
-    };
-  }, [control.code, control.name]);
-
   const handleSave = () => {
+    if (!control) return;
     const formData = new FormData();
     formData.append("intent", "save");
     formData.append("controlId", control.id.toString());
@@ -418,6 +406,7 @@ export default function DomainControl() {
   };
 
   const handleRunAnalysis = () => {
+    if (!control) return;
     const formData = new FormData();
     formData.append("intent", "analyze");
     formData.append("controlId", control.id.toString());
@@ -432,20 +421,15 @@ export default function DomainControl() {
     submit(formData, { method: "post" });
   };
 
-  // Upload state
-  const [isUploading, setIsUploading] = useState(false);
-  const evidenceInputRef = useRef<HTMLInputElement>(null);
-  const evidenceFetcher = useFetcher();
-
   const handleUploadEvidence = async (
     e: React.ChangeEvent<HTMLInputElement>,
   ) => {
+    if (!control) return;
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsUploading(true);
     try {
-      // Rename file to include controlId
       const parts = file.name.split(".");
       const ext = parts.length > 1 ? `.${parts.pop()}` : "";
       const baseName = parts.join(".");
@@ -454,9 +438,7 @@ export default function DomainControl() {
 
       // 1. Upload to Supabase
       const result = await uploadToSupabase(renamedFile, "evidence");
-      if (!result) {
-        throw new Error("Failed to upload file to storage");
-      }
+      if (!result) throw new Error("Failed to upload file to storage");
 
       // 2. Save metadata to backend
       const evidence = await EvidenceService.createEvidence({
@@ -465,12 +447,13 @@ export default function DomainControl() {
         controlId: control.id,
       });
 
-      if (!evidence) {
-        throw new Error("Failed to save evidence metadata");
-      }
+      if (!evidence) throw new Error("Failed to save evidence metadata");
 
-      // 3. Reload page to show new evidence
-      window.location.reload();
+      // 3. Refresh Evidence List
+      // In this client-side model, we should refresh data.
+      // Simplest is to reload page or re-fetch evidence.
+      // Let's re-fetch evidence manually or update state
+      setEvidences((prev) => [...prev, evidence]);
     } catch (err) {
       console.error("Upload error:", err);
       alert(err instanceof Error ? err.message : "Upload failed");
@@ -484,24 +467,71 @@ export default function DomainControl() {
 
   const handleDeleteEvidence = async (evidence: EvidenceResponseDto) => {
     if (!confirm("Delete this evidence?")) return;
-
     try {
-      // 1. Delete from Supabase storage (if it's a Supabase URL)
       if (evidence.filePath && evidence.filePath.includes("supabase.co")) {
         await deleteFromSupabase(evidence.filePath, "evidence");
       }
-
-      // 2. Delete from backend database
       await EvidenceService.deleteEvidenceById(evidence.id);
-
-      // 3. Reload page to refresh evidence list
-      window.location.reload();
+      setEvidences((prev) => prev.filter((e) => e.id !== evidence.id));
     } catch (err) {
       console.error("Delete error:", err);
       alert("Failed to delete evidence");
     }
   };
 
+  const handleCopyAnalysis = async () => {
+    const textToCopy =
+      rawAnalysis || (aiAnalysis ? JSON.stringify(aiAnalysis, null, 2) : "");
+    if (!textToCopy) return;
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+  };
+
+  // Helper to map status to badge variant (re-added if lost)
+  const getStatusVariant = (s: ControlStatus) => {
+    switch (s) {
+      case ControlStatus.IMPLEMENTED:
+        return "success";
+      case ControlStatus.PARTIALLY:
+        return "warning";
+      case ControlStatus.NOT_IMPLEMENTED:
+        return "error";
+      default:
+        return "default";
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-full py-20">
+        <Loader2 className="w-8 h-8 animate-spin text-main-blue opacity-50" />
+      </div>
+    );
+  }
+
+  if (!control) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-4">
+        <div className="p-4 bg-red-50 rounded-full">
+          <AlertTriangle className="w-8 h-8 text-red-500" />
+        </div>
+        <h2 className="text-xl font-bold text-slate-800">Control Not Found</h2>
+        <p className="text-slate-500 text-center max-w-md">
+          We couldn't find control <strong>{controlNumber}</strong> for{" "}
+          {currentYear}. It might not be applicable for this assessment year or
+          the company context.
+        </p>
+        <Link to="/assessment" className="text-main-blue hover:underline">
+          Return to Assessment Overview
+        </Link>
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col gap-6 w-full">
       {/* Header */}
@@ -521,9 +551,10 @@ export default function DomainControl() {
           <div className="flex items-center gap-3 mt-2">
             <StatusBadge
               label={
-                controlStatusConfig[control.status]?.label || control.status
+                controlStatusConfig[control.status as ControlStatus]?.label ||
+                control.status
               }
-              variant={getStatusVariant(control.status)}
+              variant={getStatusVariant(control.status as ControlStatus)}
             />
             <div className="h-4 w-px bg-slate-200"></div>
             <span className="text-sm text-slate-500">
