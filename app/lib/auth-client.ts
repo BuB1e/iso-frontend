@@ -1,9 +1,8 @@
 import { createAuthClient } from "better-auth/react";
-import { BackendConfig } from "~/configs";
 
 export const authClient = createAuthClient({
-  baseURL: BackendConfig.BACKEND_URL,
+  baseURL: "", // Same origin — proxied to backend server-side
   fetchOptions: {
-    credentials: "include", // Required for cross-origin cookie auth
+    credentials: "include",
   },
 });

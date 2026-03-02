@@ -5,12 +5,13 @@ import type {
   UpdateControlDto,
 } from "~/dto";
 import axios from "axios";
-import { BackendConfig } from "~/configs";
+import { getApiBaseUrl } from "~/configs";
 
 export class ControlService {
   private static prefix = "/api/controls";
-  private static BACKEND_URL = BackendConfig.BACKEND_URL;
-  private static API_URL = this.BACKEND_URL + this.prefix;
+  private static get API_URL() {
+    return getApiBaseUrl() + this.prefix;
+  }
 
   public static async getAllControl(): Promise<ControlResponseDto[]> {
     try {
@@ -23,9 +24,13 @@ export class ControlService {
     }
   }
 
-  public static async getAllByAssessmentControlId(id: number): Promise<ControlResponseDto[]> {
+  public static async getAllByAssessmentControlId(
+    id: number,
+  ): Promise<ControlResponseDto[]> {
     try {
-      const response = await axios.get(`${this.API_URL}/getAllByAssessmentControlId/${id}`);
+      const response = await axios.get(
+        `${this.API_URL}/getAllByAssessmentControlId/${id}`,
+      );
       const data: ControlResponseDto[] = await response.data;
       return data;
     } catch (error) {

@@ -36,4 +36,7 @@ export default [
       ]),
     ]),
   ]),
+
+  // Catch-all API proxy — forwards /api/* to the real backend server-side
+  route("api/*", "routes/api.proxy.ts"),
 ] satisfies RouteConfig;

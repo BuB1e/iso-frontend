@@ -1,11 +1,12 @@
 import type { CreateUserDto, UpdateUserDto, UserResponseDto } from "~/dto";
 import axios from "axios";
-import { BackendConfig } from "~/configs";
+import { getApiBaseUrl } from "~/configs";
 
 export class UserService {
   private static prefix = "/api/users";
-  private static BACKEND_URL = BackendConfig.BACKEND_URL;
-  private static API_URL = this.BACKEND_URL + this.prefix;
+  private static get API_URL() {
+    return getApiBaseUrl() + this.prefix;
+  }
 
   public static async createUser(
     body: CreateUserDto,
