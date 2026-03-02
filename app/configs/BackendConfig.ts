@@ -1,5 +1,4 @@
 export const BackendConfig = {
+  // Client-side environment variables
   BACKEND_URL: import.meta.env.VITE_BACKEND_URL || "NO_BACKEND_URL_CONFIG_IN_ENV",
-  SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL || "NO_SUPABASE_URL_CONFIG_IN_ENV",
-  SUPABASE_ANON_KEY: import.meta.env.VITE_SUPABASE_ANON_KEY || "NO_SUPABASE_ANON_KEY_CONFIG_IN_ENV",
 };
