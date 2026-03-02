@@ -1,10 +1,11 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import {
   useLoaderData,
   useActionData,
   Form,
   useNavigation,
   useRevalidator,
+  useFetcher,
 } from "react-router";
 import type { ActionFunctionArgs } from "react-router";
 import {
@@ -40,7 +41,7 @@ import { useUserStore, useCanEditImplementation } from "~/stores/userStore";
 import { useAdminStore } from "~/stores/adminStore";
 import { useYearStore } from "~/stores/yearStore";
 import { UserRole } from "~/types";
-import { uploadToSupabase, deleteFromSupabase } from "~/lib/supabase";
+import { uploadFileToStorage, deleteFileFromStorage } from "~/lib/s3storage.server";
 
 // Extended interface
 interface Evidence extends EvidenceResponseDto {
@@ -66,18 +67,45 @@ export async function loader() {
   };
 }
 
-// Action - handle delete
+// Action - handle upload and delete (server-side)
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
   const intent = formData.get("intent") as string;
+
+  if (intent === "upload") {
+    const file = formData.get("file") as File;
+    const controlId = Number(formData.get("uploadControlId"));
+
+    // Rename file to include controlId
+    const parts = file.name.split(".");
+    const ext = parts.length > 1 ? `.${parts.pop()}` : "";
+    const newFileName = `${parts.join(".")}_${controlId}${ext}`;
+    const renamedFile = new File([file], newFileName, { type: file.type });
+
+    // 1. Upload to R2
+    const result = await uploadFileToStorage(renamedFile, "evidence");
+    if (!result)
+      return { success: false, intent, error: "Failed to upload file to storage" };
+
+    // 2. Save metadata to backend
+    const evidence = await EvidenceService.createEvidence({
+      fileName: newFileName,
+      filePath: result.url,
+      controlId,
+    });
+    if (!evidence)
+      return { success: false, intent, error: "Failed to save evidence metadata" };
+
+    return { success: true, intent };
+  }
 
   if (intent === "delete") {
     const id = Number(formData.get("id"));
     const filePath = formData.get("filePath") as string;
 
-    // 1. Delete from Supabase storage (if it's a Supabase URL)
-    if (filePath && filePath.includes("supabase.co")) {
-      await deleteFromSupabase(filePath, "evidence");
+    // 1. Delete from R2 storage
+    if (filePath) {
+      await deleteFileFromStorage(filePath, "evidence");
     }
 
     // 2. Delete from backend database
@@ -133,57 +161,40 @@ export default function Evidence() {
   // Upload modal state
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [uploadControlId, setUploadControlId] = useState<number | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const revalidator = useRevalidator();
 
-  // Handle file upload to Supabase then save to backend
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Fetcher for server-side upload action
+  const uploadFetcher = useFetcher<typeof action>();
+  const isUploading = uploadFetcher.state === "submitting";
+
+  // Close modal and refresh when upload succeeds
+  useEffect(() => {
+    if (uploadFetcher.data?.intent === "upload") {
+      if (uploadFetcher.data.success) {
+        setIsUploadModalOpen(false);
+        setUploadControlId(null);
+        setUploadError(null);
+        revalidator.revalidate();
+      } else {
+        setUploadError((uploadFetcher.data as any).error ?? "Upload failed");
+      }
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }, [uploadFetcher.data]);
+
+  // Submit file to server-side action for R2 upload
+  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !uploadControlId) return;
-
-    setIsUploading(true);
     setUploadError(null);
 
-    try {
-      // Rename file to include controlId
-      const parts = file.name.split(".");
-      const ext = parts.length > 1 ? `.${parts.pop()}` : "";
-      const baseName = parts.join(".");
-      const newFileName = `${baseName}_${uploadControlId}${ext}`;
-      const renamedFile = new File([file], newFileName, { type: file.type });
-
-      // 1. Upload to Supabase
-      const result = await uploadToSupabase(renamedFile, "evidence");
-      if (!result) {
-        throw new Error("Failed to upload file to storage");
-      }
-
-      // 2. Save metadata to backend
-      const evidence = await EvidenceService.createEvidence({
-        fileName: newFileName,
-        filePath: result.url,
-        controlId: uploadControlId,
-      });
-
-      if (!evidence) {
-        throw new Error("Failed to save evidence metadata");
-      }
-
-      // 3. Close modal and refresh data
-      setIsUploadModalOpen(false);
-      setUploadControlId(null);
-      revalidator.revalidate();
-    } catch (err) {
-      console.error("Upload error:", err);
-      setUploadError(err instanceof Error ? err.message : "Upload failed");
-    } finally {
-      setIsUploading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-    }
+    const formData = new FormData();
+    formData.append("intent", "upload");
+    formData.append("file", file);
+    formData.append("uploadControlId", String(uploadControlId));
+    uploadFetcher.submit(formData, { method: "post", encType: "multipart/form-data" });
   };
 
   // 1. Filter Evidence by Admin Context / User Company

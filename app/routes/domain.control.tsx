@@ -44,7 +44,7 @@ import {
   AssessmentControlService,
   IsoAssessmentService,
 } from "~/services";
-import { uploadToSupabase, deleteFromSupabase } from "~/lib/supabase";
+import { uploadFileToStorage, deleteFileFromStorage } from "~/lib/s3storage.server";
 import type { EvidenceResponseDto, SuggestionResponseDto } from "~/dto";
 
 // Enums
@@ -143,26 +143,42 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   if (intent === "upload") {
-    // Simulating upload since we don't have binary upload endpoint
-    // Create query param or body
-    const fileName =
-      (formData.get("file") as File)?.name || "uploaded_evidence.pdf";
-    // Mock path
-    const filePath = "/uploads/" + fileName;
+    const file = formData.get("file") as File;
 
-    // Create record
-    const result = await EvidenceService.createEvidence({
+    const parts = file.name.split(".");
+    const ext = parts.length > 1 ? `.${parts.pop()}` : "";
+    const newFileName = `${parts.join(".")}_${controlId}${ext}`;
+    const renamedFile = new File([file], newFileName, { type: file.type });
+
+    // 1. Upload to R2
+    const result = await uploadFileToStorage(renamedFile, "evidence");
+    if (!result)
+      return { success: false, intent, message: "Failed to upload file to storage" };
+
+    // 2. Save metadata to backend
+    const evidence = await EvidenceService.createEvidence({
       controlId,
-      fileName,
-      filePath,
+      fileName: newFileName,
+      filePath: result.url,
     });
-    return { success: !!result, intent, message: "Evidence uploaded" };
+    if (!evidence)
+      return { success: false, intent, message: "Failed to save evidence metadata" };
+
+    return { success: true, intent, message: "Evidence uploaded", evidence };
   }
 
   if (intent === "delete-evidence") {
     const evidenceId = Number(formData.get("evidenceId"));
+    const filePath = formData.get("filePath") as string;
+
+    // 1. Delete from R2 storage
+    if (filePath) {
+      await deleteFileFromStorage(filePath, "evidence");
+    }
+
+    // 2. Delete from backend database
     const result = await EvidenceService.deleteEvidenceById(evidenceId);
-    return { success: result, intent, message: "Evidence deleted" };
+    return { success: result, intent, message: "Evidence deleted", evidenceId };
   }
 
   return { success: false };
@@ -177,6 +193,8 @@ export default function DomainControl() {
   const suggestionFetcher = useFetcher<{
     suggestion: SuggestionResponseDto | null;
   }>();
+  const evidenceUploadFetcher = useFetcher<typeof action>();
+  const evidenceDeleteFetcher = useFetcher<typeof action>();
 
   const { currentYear } = useYearStore();
   const params = useParams();
@@ -201,7 +219,7 @@ export default function DomainControl() {
   // UI State
   const [activeTab, setActiveTab] = useState<Tab>(Tab.Implementation);
   const [isDirty, setIsDirty] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
+  const isUploading = evidenceUploadFetcher.state === "submitting";
   const evidenceInputRef = useRef<HTMLInputElement>(null);
 
   // Form State
@@ -421,62 +439,47 @@ export default function DomainControl() {
     submit(formData, { method: "post" });
   };
 
-  const handleUploadEvidence = async (
+  // Update evidences state after server-side upload/delete
+  useEffect(() => {
+    const data = evidenceUploadFetcher.data as any;
+    if (data?.intent === "upload" && data.success && data.evidence) {
+      setEvidences((prev) => [...prev, data.evidence]);
+      if (evidenceInputRef.current) evidenceInputRef.current.value = "";
+    }
+  }, [evidenceUploadFetcher.data]);
+
+  useEffect(() => {
+    const data = evidenceDeleteFetcher.data as any;
+    if (data?.intent === "delete-evidence" && data.success) {
+      setEvidences((prev) => prev.filter((e) => e.id !== data.evidenceId));
+    }
+  }, [evidenceDeleteFetcher.data]);
+
+  const handleUploadEvidence = (
     e: React.ChangeEvent<HTMLInputElement>,
   ) => {
     if (!control) return;
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setIsUploading(true);
-    try {
-      const parts = file.name.split(".");
-      const ext = parts.length > 1 ? `.${parts.pop()}` : "";
-      const baseName = parts.join(".");
-      const newFileName = `${baseName}_${control.id}${ext}`;
-      const renamedFile = new File([file], newFileName, { type: file.type });
-
-      // 1. Upload to Supabase
-      const result = await uploadToSupabase(renamedFile, "evidence");
-      if (!result) throw new Error("Failed to upload file to storage");
-
-      // 2. Save metadata to backend
-      const evidence = await EvidenceService.createEvidence({
-        fileName: newFileName,
-        filePath: result.url,
-        controlId: control.id,
-      });
-
-      if (!evidence) throw new Error("Failed to save evidence metadata");
-
-      // 3. Refresh Evidence List
-      // In this client-side model, we should refresh data.
-      // Simplest is to reload page or re-fetch evidence.
-      // Let's re-fetch evidence manually or update state
-      setEvidences((prev) => [...prev, evidence]);
-    } catch (err) {
-      console.error("Upload error:", err);
-      alert(err instanceof Error ? err.message : "Upload failed");
-    } finally {
-      setIsUploading(false);
-      if (evidenceInputRef.current) {
-        evidenceInputRef.current.value = "";
-      }
-    }
+    const formData = new FormData();
+    formData.append("intent", "upload");
+    formData.append("controlId", String(control.id));
+    formData.append("file", file);
+    evidenceUploadFetcher.submit(formData, {
+      method: "post",
+      encType: "multipart/form-data",
+    });
   };
 
-  const handleDeleteEvidence = async (evidence: EvidenceResponseDto) => {
+  const handleDeleteEvidence = (evidence: EvidenceResponseDto) => {
     if (!confirm("Delete this evidence?")) return;
-    try {
-      if (evidence.filePath && evidence.filePath.includes("supabase.co")) {
-        await deleteFromSupabase(evidence.filePath, "evidence");
-      }
-      await EvidenceService.deleteEvidenceById(evidence.id);
-      setEvidences((prev) => prev.filter((e) => e.id !== evidence.id));
-    } catch (err) {
-      console.error("Delete error:", err);
-      alert("Failed to delete evidence");
-    }
+    const formData = new FormData();
+    formData.append("intent", "delete-evidence");
+    formData.append("controlId", String(control?.id));
+    formData.append("evidenceId", String(evidence.id));
+    formData.append("filePath", evidence.filePath || "");
+    evidenceDeleteFetcher.submit(formData, { method: "post" });
   };
 
   const handleCopyAnalysis = async () => {
