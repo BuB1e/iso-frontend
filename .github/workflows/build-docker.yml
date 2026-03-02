@@ -20,4 +20,4 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/iso-frontend:latest
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/iso-frontend:latest
