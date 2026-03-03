@@ -2,6 +2,7 @@
   "name": "iso-project-frontend",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@8.10.0",
   "scripts": {
     "build": "react-router build",
     "dev": "react-router dev",
