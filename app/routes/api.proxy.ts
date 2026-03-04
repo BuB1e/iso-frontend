@@ -41,7 +41,37 @@ async function proxyRequest(request: Request): Promise<Response> {
     const response = await fetch(targetUrl, fetchOptions);
 
     // Forward the response back to the client
-    const responseHeaders = new Headers(response.headers);
+    const responseHeaders = new Headers();
+    response.headers.forEach((value, key) => {
+      // we handle set-cookie separately below
+      if (key.toLowerCase() !== "set-cookie") {
+        responseHeaders.append(key, value);
+      }
+    });
+
+    // Properly forward multiple cookies without merging them into a single string
+    if (typeof response.headers.getSetCookie === "function") {
+      response.headers.getSetCookie().forEach((cookie) => {
+        let rewrittenCookie = cookie;
+        // Strip Domain=... so the browser accepts the cookie on localhost
+        rewrittenCookie = rewrittenCookie.replace(/Domain=[^;]+;?\s*/gi, "");
+
+        // Strip out Secure flag if we are proxying on local HTTP, otherwise browser drops it
+        if (
+          request.url.startsWith("http://localhost") ||
+          request.url.startsWith("http://127.0.0.1")
+        ) {
+          rewrittenCookie = rewrittenCookie.replace(/Secure;?\s*/gi, "");
+          rewrittenCookie = rewrittenCookie.replace(
+            /SameSite=None;?\s*/gi,
+            "SameSite=Lax; ",
+          );
+        }
+
+        responseHeaders.append("set-cookie", rewrittenCookie);
+      });
+    }
+
     // Remove transfer-encoding as it may conflict with the framework's response handling
     responseHeaders.delete("transfer-encoding");
 
