@@ -26,18 +26,20 @@ async function proxyRequest(request: Request): Promise<Response> {
   headers.delete("connection");
 
   try {
-    // --- COOKIE NAME REWRITING (browser → backend) ---
-    // On localhost, we strip the "__Secure-" prefix from cookie names so the
-    // browser accepts them (since __Secure- cookies require HTTPS).
-    // But the backend expects cookies with the original __Secure- prefix.
-    // So here we rename them BACK before forwarding to the backend.
-    const cookieHeader = headers.get("cookie");
-    if (cookieHeader) {
-      const rewrittenCookie = cookieHeader.replace(
-        /\bbetter-auth\.session_token\b/g,
-        "__Secure-better-auth.session_token",
+    // --- SSR BEARER TOKEN FIX ---
+    // In React Router SSR, `authClient.useSession` has no access to `localStorage`,
+    // meaning the SSR fetch request will fire WITHOUT the Bearer token!
+    // But SSR DOES send the browser's cookies. We must manually rip the token from
+    // the cookie and force it into the `Authorization` header so the backend auth succeeds.
+    const cookieHeader = request.headers.get("cookie");
+    if (cookieHeader && !headers.has("authorization")) {
+      const match = cookieHeader.match(
+        /(?:better-auth\.session_token|__Secure-better-auth\.session_token)=([^;]+)/,
       );
-      headers.set("cookie", rewrittenCookie);
+      if (match) {
+        // the backend Bearer plugin looks for this header specifically!
+        headers.set("authorization", `Bearer ${decodeURIComponent(match[1])}`);
+      }
     }
 
     const fetchOptions: RequestInit = {
@@ -53,25 +55,6 @@ async function proxyRequest(request: Request): Promise<Response> {
     }
 
     const response = await fetch(targetUrl, fetchOptions);
-
-    // DEBUG: Log auth-related proxy requests
-    if (url.pathname.includes("/auth/")) {
-      console.log(
-        `[API Proxy] ${request.method} ${url.pathname} → ${response.status}`,
-      );
-      console.log(
-        `[API Proxy] Authorization header sent: ${headers.has("authorization") ? "YES (" + headers.get("authorization")!.substring(0, 30) + "...)" : "NO"}`,
-      );
-      console.log(
-        `[API Proxy] Cookie header sent: ${headers.has("cookie") ? "YES" : "NO"}`,
-      );
-      console.log(
-        `[API Proxy] Backend set-auth-token: ${response.headers.get("set-auth-token") || "MISSING"}`,
-      );
-      console.log(
-        `[API Proxy] Backend set-cookie count: ${typeof response.headers.getSetCookie === "function" ? response.headers.getSetCookie().length : "N/A"}`,
-      );
-    }
 
     // Forward the response back to the client
     const responseHeaders = new Headers();

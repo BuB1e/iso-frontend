@@ -55,7 +55,18 @@ export default function Login() {
         password,
       },
       {
-        onSuccess: () => {
+        onSuccess: (ctx) => {
+          // Extract and store bearer token from sign-in response
+          const data = ctx.data as any;
+          const token =
+            ctx.response.headers.get("set-auth-token") ||
+            data?.token ||
+            data?.session?.token;
+
+          if (token) {
+            localStorage.setItem("bearer_token", token);
+          }
+
           navigate("/dashboard");
         },
         onError: (ctx) => {
