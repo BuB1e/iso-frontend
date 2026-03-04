@@ -26,6 +26,20 @@ async function proxyRequest(request: Request): Promise<Response> {
   headers.delete("connection");
 
   try {
+    // --- COOKIE NAME REWRITING (browser → backend) ---
+    // On localhost, we strip the "__Secure-" prefix from cookie names so the
+    // browser accepts them (since __Secure- cookies require HTTPS).
+    // But the backend expects cookies with the original __Secure- prefix.
+    // So here we rename them BACK before forwarding to the backend.
+    const cookieHeader = headers.get("cookie");
+    if (cookieHeader) {
+      const rewrittenCookie = cookieHeader.replace(
+        /\bbetter-auth\.session_token\b/g,
+        "__Secure-better-auth.session_token",
+      );
+      headers.set("cookie", rewrittenCookie);
+    }
+
     const fetchOptions: RequestInit = {
       method: request.method,
       headers,
@@ -39,6 +53,25 @@ async function proxyRequest(request: Request): Promise<Response> {
     }
 
     const response = await fetch(targetUrl, fetchOptions);
+
+    // DEBUG: Log auth-related proxy requests
+    if (url.pathname.includes("/auth/")) {
+      console.log(
+        `[API Proxy] ${request.method} ${url.pathname} → ${response.status}`,
+      );
+      console.log(
+        `[API Proxy] Authorization header sent: ${headers.has("authorization") ? "YES (" + headers.get("authorization")!.substring(0, 30) + "...)" : "NO"}`,
+      );
+      console.log(
+        `[API Proxy] Cookie header sent: ${headers.has("cookie") ? "YES" : "NO"}`,
+      );
+      console.log(
+        `[API Proxy] Backend set-auth-token: ${response.headers.get("set-auth-token") || "MISSING"}`,
+      );
+      console.log(
+        `[API Proxy] Backend set-cookie count: ${typeof response.headers.getSetCookie === "function" ? response.headers.getSetCookie().length : "N/A"}`,
+      );
+    }
 
     // Forward the response back to the client
     const responseHeaders = new Headers();
@@ -59,12 +92,33 @@ async function proxyRequest(request: Request): Promise<Response> {
         // Strip out Secure flag if we are proxying on local HTTP, otherwise browser drops it
         if (
           request.url.startsWith("http://localhost") ||
-          request.url.startsWith("http://127.0.0.1")
+          request.url.startsWith("http://127.0.0.1") ||
+          request.url.startsWith("http://0.0.0.0")
         ) {
-          rewrittenCookie = rewrittenCookie.replace(/Secure;?\s*/gi, "");
+          // IMPORTANT: Strip __Secure- prefix BEFORE stripping the Secure flag,
+          // otherwise /Secure;?\s*/gi also matches the "Secure" inside "__Secure-"
+          // and corrupts the cookie name!
+          rewrittenCookie = rewrittenCookie.replace(/__Secure-/gi, "");
+          rewrittenCookie = rewrittenCookie.replace(/;\s*Secure/gi, "");
           rewrittenCookie = rewrittenCookie.replace(
             /SameSite=None;?\s*/gi,
             "SameSite=Lax; ",
+          );
+        }
+
+        // --- BEARER TOKEN INJECTION FIX ---
+        // If the backend sent the session_token cookie, extract its value and expose
+        // it explicitly via the `set-auth-token` header (since Cloudflare/CORS may strip it)
+        const sessionTokenMatch = cookie.match(
+          /(?:better-auth\.session_token|__Secure-better-auth\.session_token)=([^;]+)/,
+        );
+        if (sessionTokenMatch) {
+          const rawToken = sessionTokenMatch[1];
+          // better-auth sometimes URLEncodes the token
+          responseHeaders.set("set-auth-token", decodeURIComponent(rawToken));
+          responseHeaders.append(
+            "Access-Control-Expose-Headers",
+            "set-auth-token",
           );
         }
 

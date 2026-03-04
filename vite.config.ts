@@ -9,14 +9,8 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [tailwindcss(), reactRouter(), tsconfigPaths()],
-    server: {
-      proxy: {
-        // Proxy /api requests to the backend during development
-        "/api": {
-          target: env.BACKEND_URL || "NO_BACKEND_URL_IN_CONFIG_ENV",
-          changeOrigin: true,
-        },
-      },
-    },
+    // NOTE: Do NOT add server.proxy for /api here!
+    // All /api/* requests must go through the React Router route at api.proxy.ts
+    // which handles cookie rewriting, bearer token injection, and header manipulation.
   };
 });

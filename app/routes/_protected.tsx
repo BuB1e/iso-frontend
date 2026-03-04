@@ -12,6 +12,7 @@ export default function ProtectedLayout() {
   const setCurrentUser = useUserStore((state) => state.setCurrentUser);
 
   useEffect(() => {
+    // Wait until it actually finishes checking
     if (!isPending && !session) {
       if (location.pathname !== "/login") {
         navigate("/login");
