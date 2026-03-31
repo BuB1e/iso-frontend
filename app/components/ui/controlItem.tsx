@@ -9,6 +9,10 @@ import {
   controlsTypeColorMap,
   type DomainColorKey,
 } from "~/types";
+import { useYearStore } from "~/stores/yearStore";
+import { useUserStore } from "~/stores/userStore";
+import { useAdminStore } from "~/stores/adminStore";
+import { UserRole } from "~/types";
 
 // Props for the main ControlItem component
 interface ControlItemProps {
@@ -96,9 +100,23 @@ function StatusBadge({ status }: { status: ControlStatus }) {
  * High-risk control item - displayed on dashboard for controls needing attention
  */
 function HighRiskControlItem({ control }: HighRiskControlItemProps) {
+  const { currentYear } = useYearStore();
+  const currentUser = useUserStore((state) => state.currentUser);
+  const { selectedCompanyId } = useAdminStore();
+  
+  const targetCompanyId =
+    currentUser?.role === UserRole.ADMIN
+      ? selectedCompanyId
+      : currentUser?.companyId;
+
+  const searchParams = new URLSearchParams();
+  if (currentYear) searchParams.set("year", String(currentYear));
+  if (targetCompanyId) searchParams.set("companyId", String(targetCompanyId));
+  const queryString = searchParams.toString();
+
   return (
     <Link
-      to={`/assessment/domain/A${control.code.split(".")[1]?.split(".")[0] || "5"}/${control.code}`}
+      to={`/assessment/domain/A${control.code.split(".")[1]?.split(".")[0] || "5"}/${control.code}${queryString ? `?${queryString}` : ""}`}
       className="
         flex flex-row justify-between items-center h-fit w-full py-3 px-4
         rounded-lg border bg-white border-alert-red-bg shadow-sm
@@ -155,9 +173,23 @@ function AssessmentControlItem({
 
   const colors = colorStyles[colorKey];
 
+  const { currentYear } = useYearStore();
+  const currentUser = useUserStore((state) => state.currentUser);
+  const { selectedCompanyId } = useAdminStore();
+
+  const targetCompanyId =
+    currentUser?.role === UserRole.ADMIN
+      ? selectedCompanyId
+      : currentUser?.companyId;
+
+  const searchParams = new URLSearchParams();
+  if (currentYear) searchParams.set("year", String(currentYear));
+  if (targetCompanyId) searchParams.set("companyId", String(targetCompanyId));
+  const queryString = searchParams.toString();
+
   return (
     <Link
-      to={`/assessment/domain/${domainNumber}/${control.code}`}
+      to={`/assessment/domain/${domainNumber}/${control.code}${queryString ? `?${queryString}` : ""}`}
       className={`
         flex flex-row justify-between items-center h-fit w-full py-3 px-4
         rounded-lg border shadow-sm

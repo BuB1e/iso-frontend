@@ -24,6 +24,8 @@ import {
   Loader2,
   Copy,
   Check,
+  Eye,
+  X,
 } from "lucide-react";
 import Markdown from "react-markdown";
 
@@ -44,8 +46,14 @@ import {
   AssessmentControlService,
   IsoAssessmentService,
 } from "~/services";
-import { uploadFileToStorage, deleteFileFromStorage } from "~/lib/s3storage.server";
+import { uploadFileToStorage, deleteFileFromStorage, getSignedFileUrl } from "~/lib/s3storage.server";
 import type { EvidenceResponseDto, SuggestionResponseDto } from "~/dto";
+
+// Extended interface
+interface Evidence extends EvidenceResponseDto {
+  signedUrl?: string | null;
+  [key: string]: unknown;
+}
 
 // Enums
 enum Tab {
@@ -75,11 +83,114 @@ function simpleDate(dateStr: string | Date | undefined) {
   return new Date(dateStr).toLocaleDateString();
 }
 
+function isPreviewable(filename: string): boolean {
+  const ext = filename.split(".").pop()?.toLowerCase();
+  return ["jpg", "jpeg", "png", "gif", "webp", "pdf"].includes(ext || "");
+}
+
+function isImageFile(filename: string): boolean {
+  const ext = filename.split(".").pop()?.toLowerCase();
+  return ["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(ext || "");
+}
+
 // Loader
-export async function loader({ params }: LoaderFunctionArgs) {
-  // Only fetch assessments list to determine context
+export async function loader({ params, request }: LoaderFunctionArgs) {
+  const url = new URL(request.url);
+  const companyIdParam = url.searchParams.get("companyId");
+  const yearParam = url.searchParams.get("year");
+  const controlNumber = params.controlNumber;
+
   const isoAssessments = await IsoAssessmentService.getAllIsoAssessment();
-  return { isoAssessments };
+
+  // If we don't have company/year in URL, we can only return assessments for now
+  // The component will handle the fallback/redirect or client-side fetch if needed
+  if (!companyIdParam || !yearParam || !controlNumber) {
+    return { isoAssessments, control: null, evidences: [], suggestion: null, stats: null };
+  }
+
+  const targetCompanyId = Number(companyIdParam);
+  const currentYear = Number(yearParam);
+
+  // Determine domain type from control number
+  const getDomainType = (code: string | undefined): string => {
+    if (!code) return "ORGANIZATION";
+    if (code.startsWith("A.5")) return "ORGANIZATION";
+    if (code.startsWith("A.6")) return "PEOPLE";
+    if (code.startsWith("A.7")) return "PHYSICAL";
+    if (code.startsWith("A.8")) return "TECHNOLOGICAL";
+    return "ORGANIZATION";
+  };
+  const expectedType = getDomainType(controlNumber);
+
+  // 1. Find active assessment
+  const activeAssessment = isoAssessments.find((a) => {
+    if (a.year !== currentYear) return false;
+    return a.companyId === targetCompanyId;
+  });
+
+  if (!activeAssessment) {
+    return { isoAssessments, control: null, evidences: [], suggestion: null, stats: null };
+  }
+
+  // 2. Fetch AssessmentControls
+  const acs = await AssessmentControlService.getAllByIsoAssessmentId(
+    activeAssessment.id,
+  );
+  const targetAc = acs.find((ac) => String(ac.type) === expectedType);
+
+  if (!targetAc) {
+    return { isoAssessments, control: null, evidences: [], suggestion: null, stats: null };
+  }
+
+  // 3. Fetch all controls in this domain (needed for stats and to find the current one)
+  const fetchedControls = await ControlService.getAllByAssessmentControlId(targetAc.id);
+
+  // Calculate Stats
+  const stats = {
+    total: fetchedControls.length,
+    implemented: fetchedControls.filter(
+      (c) => c.status === ControlStatus.IMPLEMENTED,
+    ).length,
+    percentage: 0,
+  };
+  stats.percentage =
+    stats.total > 0
+      ? Math.round((stats.implemented / stats.total) * 100)
+      : 0;
+
+  // Find Target Control
+  const targetControl = fetchedControls.find(
+    (c) => c.code === controlNumber,
+  );
+
+  if (!targetControl) {
+    return { isoAssessments, control: null, evidences: [], suggestion: null, stats, targetAc };
+  }
+
+  // 4. Fetch Evidence & Suggestion for this specific control
+  const [evData, suggestData] = await Promise.all([
+    EvidenceService.getAllEvidence(),
+    SuggestionService.getSuggestionByControlId(targetControl.id),
+  ]);
+
+  // Generate signed URLs for each evidence item (Sync logic with evidence.tsx)
+  const evidences: Evidence[] = await Promise.all(
+    evData
+      .filter((e) => e.controlId === targetControl.id)
+      .map(async (ev) => ({
+        ...ev,
+        signedUrl: await getSignedFileUrl(ev.filePath, "evidence"),
+      })),
+  );
+
+  return {
+    isoAssessments,
+    control: targetControl,
+    evidences,
+    suggestion: suggestData,
+    stats,
+    targetAc,
+  };
 }
 
 // Action
@@ -164,7 +275,14 @@ export async function action({ request }: ActionFunctionArgs) {
     if (!evidence)
       return { success: false, intent, message: "Failed to save evidence metadata" };
 
-    return { success: true, intent, message: "Evidence uploaded", evidence };
+    const signedUrl = await getSignedFileUrl(result.url, "evidence");
+
+    return { 
+      success: true, 
+      intent, 
+      message: "Evidence uploaded", 
+      evidence: { ...evidence, filePath: signedUrl || evidence.filePath } 
+    };
   }
 
   if (intent === "delete-evidence") {
@@ -185,7 +303,7 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function DomainControl() {
-  const { isoAssessments } = useLoaderData<typeof loader>();
+  const { isoAssessments, control: initialControl, evidences: initialEvidences, suggestion: initialSuggestion, stats: initialStats } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const submit = useSubmit();
   const navigation = useNavigation();
@@ -204,17 +322,18 @@ export default function DomainControl() {
   const canReview = useCanSubmitReview();
 
   // State
-  const [loading, setLoading] = useState(true);
-  const [control, setControl] = useState<any>(null);
-  const [stats, setStats] = useState({
+  const [loading, setLoading] = useState(!initialControl);
+  const [control, setControl] = useState<any>(initialControl);
+  const [stats, setStats] = useState(initialStats || {
     total: 0,
     implemented: 0,
     percentage: 0,
   });
-  const [evidences, setEvidences] = useState<EvidenceResponseDto[]>([]);
+  const [evidences, setEvidences] = useState<Evidence[]>(initialEvidences || []);
   const [suggestion, setSuggestion] = useState<SuggestionResponseDto | null>(
-    null,
+    initialSuggestion || null,
   );
+  const [previewEvidence, setPreviewEvidence] = useState<Evidence | null>(null);
 
   // UI State
   const [activeTab, setActiveTab] = useState<Tab>(Tab.Implementation);
@@ -224,11 +343,11 @@ export default function DomainControl() {
 
   // Form State
   const [status, setStatus] = useState<ControlStatus>(
-    ControlStatus.NOT_IMPLEMENTED,
+    initialControl?.status || ControlStatus.NOT_IMPLEMENTED,
   );
-  const [currentPractice, setCurrentPractice] = useState("");
-  const [evidenceDescription, setEvidenceDescription] = useState("");
-  const [context, setContext] = useState("");
+  const [currentPractice, setCurrentPractice] = useState(initialControl?.currentPractice || "");
+  const [evidenceDescription, setEvidenceDescription] = useState(initialControl?.evidenceDescription || "");
+  const [context, setContext] = useState(initialControl?.userContext || "");
 
   const [copied, setCopied] = useState(false);
 
@@ -250,13 +369,35 @@ export default function DomainControl() {
   };
   const expectedType = getDomainType(controlNumber);
 
-  // Fetch Data Effect
+  // Check if we need to redirect or fetch if loader returned null (e.g. initial navigation)
   useEffect(() => {
+    if (!initialControl && currentYear && targetCompanyId && controlNumber) {
+      // If we are missing params in URL, we should probably add them to the URL
+      // or at least ensure the component knows it's loading
+      const url = new URL(window.location.href);
+      if (!url.searchParams.has("year") || !url.searchParams.has("companyId")) {
+        url.searchParams.set("year", String(currentYear));
+        url.searchParams.set("companyId", String(targetCompanyId));
+        window.history.replaceState({}, "", url.toString());
+        // You might want to use redirect but within a component we can just use revalidation or window navigation
+        // For simplicity, we can let the existing fetchData Effect handle cases where loader didn't run with correct params
+      }
+    }
+  }, [initialControl, currentYear, targetCompanyId, controlNumber]);
+
+  // Fetch Data Effect (Fallback for initial navigation or context changes)
+  useEffect(() => {
+    // If loader already gave us the data for the correct context, skip
+    if (initialControl && initialControl.code === controlNumber) {
+      setLoading(false);
+      return;
+    }
+
     async function fetchData() {
       if (!controlNumber) return;
       setLoading(true);
       try {
-        // 1. Find active assessment
+        // ... same logic as before ...
         const activeAssessment = isoAssessments.find((a) => {
           if (a.year !== currentYear) return false;
           if (!targetCompanyId) return true;
@@ -268,18 +409,15 @@ export default function DomainControl() {
           return;
         }
 
-        // 2. Fetch AssessmentControls
         const acs = await AssessmentControlService.getAllByIsoAssessmentId(
           activeAssessment.id,
         );
         const targetAc = acs.find((ac) => String(ac.type) === expectedType);
 
         if (targetAc) {
-          // 3. Fetch all controls in this domain (needed for stats and to find the current one)
           const fetchedControls =
             await ControlService.getAllByAssessmentControlId(targetAc.id);
 
-          // Calculate Stats
           const newStats = {
             total: fetchedControls.length,
             implemented: fetchedControls.filter(
@@ -293,30 +431,42 @@ export default function DomainControl() {
               : 0;
           setStats(newStats);
 
-          // Find Target Control
           const targetControl = fetchedControls.find(
             (c) => c.code === controlNumber,
           );
 
           if (targetControl) {
             setControl(targetControl);
-
-            // Sync form state
             setStatus(targetControl.status);
             setCurrentPractice(targetControl.currentPractice || "");
             setEvidenceDescription(targetControl.evidenceDescription || "");
             setContext(targetControl.userContext || "");
             setIsDirty(false);
 
-            // 4. Fetch Evidence & Suggestion for this specific control
             const [evData, suggestData] = await Promise.all([
               EvidenceService.getAllEvidence(),
               SuggestionService.getSuggestionByControlId(targetControl.id),
             ]);
 
-            setEvidences(
-              evData.filter((e) => e.controlId === targetControl.id),
+            // Sign URLs locally if not signed by server
+            const evidencesWithSignedUrls = await Promise.all(
+              evData
+                .filter((e) => e.controlId === targetControl.id)
+                .map(async (e: EvidenceResponseDto): Promise<Evidence> => {
+                  try {
+                    const response = await fetch(`/api/signed-url?path=${encodeURIComponent(e.filePath)}&bucket=evidence`);
+                    if (response.ok) {
+                      const { signedUrl } = await response.json();
+                      return { ...e, signedUrl };
+                    }
+                  } catch (err) {
+                    console.error("Error signing URL for evidence", e.id, err);
+                  }
+                  return e as Evidence;
+                })
             );
+
+            setEvidences(evidencesWithSignedUrls);
             setSuggestion(suggestData);
           } else {
             setControl(null);
@@ -340,6 +490,7 @@ export default function DomainControl() {
     selectedCompanyId,
     isoAssessments,
     expectedType,
+    initialControl
   ]);
 
   // Determine effective suggestion (Action > Fetcher > Loaded)
@@ -443,7 +594,9 @@ export default function DomainControl() {
   useEffect(() => {
     const data = evidenceUploadFetcher.data as any;
     if (data?.intent === "upload" && data.success && data.evidence) {
-      setEvidences((prev) => [...prev, data.evidence]);
+      const newEv = data.evidence;
+      // If it already has a signedUrl from the action, use it
+      setEvidences((prev) => [...prev, newEv]);
       if (evidenceInputRef.current) evidenceInputRef.current.value = "";
     }
   }, [evidenceUploadFetcher.data]);
@@ -726,11 +879,22 @@ export default function DomainControl() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {isPreviewable(evidence.fileName) && (
+                            <button
+                              onClick={() => setPreviewEvidence(evidence)}
+                              className="p-2 text-slate-400 hover:text-main-blue transition-colors"
+                              title="Preview"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                          )}
                           <a
-                            href={evidence.filePath}
+                            href={evidence.signedUrl || evidence.filePath}
+                            download={evidence.fileName}
                             target="_blank"
                             rel="noreferrer"
                             className="p-2 text-slate-400 hover:text-main-blue transition-colors"
+                            title="Download"
                           >
                             <Download className="w-4 h-4" />
                           </a>
@@ -954,6 +1118,70 @@ export default function DomainControl() {
           </div>
         </div>
       </div>
+      {/* Preview Modal */}
+      {previewEvidence && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => setPreviewEvidence(null)}
+        >
+          <div
+            className="relative bg-white rounded-2xl shadow-2xl max-w-4xl max-h-[90vh] w-full mx-4 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-50 text-main-blue rounded-lg">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-800">
+                    {previewEvidence.fileName}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Uploaded on {simpleDate(previewEvidence.createdAt)}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={previewEvidence.signedUrl || previewEvidence.filePath}
+                  download={previewEvidence.fileName}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-main-blue hover:bg-blue-50 rounded-lg transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  Download
+                </a>
+                <button
+                  onClick={() => setPreviewEvidence(null)}
+                  className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 max-h-[calc(90vh-80px)] overflow-auto flex items-center justify-center bg-slate-50">
+              {isImageFile(previewEvidence.fileName) ? (
+                <img
+                  src={previewEvidence.signedUrl || previewEvidence.filePath}
+                  alt={previewEvidence.fileName}
+                  className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-sm"
+                />
+              ) : (
+                <iframe
+                  src={previewEvidence.signedUrl || previewEvidence.filePath}
+                  title={previewEvidence.fileName}
+                  className="w-full h-[70vh] rounded-lg border border-slate-200"
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

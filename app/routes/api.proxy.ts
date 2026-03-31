@@ -73,11 +73,17 @@ async function proxyRequest(request: Request): Promise<Response> {
         rewrittenCookie = rewrittenCookie.replace(/Domain=[^;]+;?\s*/gi, "");
 
         // Strip out Secure flag if we are proxying on local HTTP, otherwise browser drops it
-        if (
-          request.url.startsWith("http://localhost") ||
-          request.url.startsWith("http://127.0.0.1") ||
-          request.url.startsWith("http://0.0.0.0")
-        ) {
+        const httpIpAddresses = process.env.HTTP_IP_ADDRESS
+          ? process.env.HTTP_IP_ADDRESS.split(",").map(ip => ip.trim())
+          : [];
+        const insecurePrefixes = [
+          "http://localhost",
+          "http://127.0.0.1",
+          "http://0.0.0.0",
+          ...httpIpAddresses
+        ];
+
+        if (insecurePrefixes.some(prefix => request.url.startsWith(prefix))) {
           // IMPORTANT: Strip __Secure- prefix BEFORE stripping the Secure flag,
           // otherwise /Secure;?\s*/gi also matches the "Secure" inside "__Secure-"
           // and corrupts the cookie name!

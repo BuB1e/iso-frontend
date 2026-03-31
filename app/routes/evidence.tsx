@@ -41,10 +41,11 @@ import { useUserStore, useCanEditImplementation } from "~/stores/userStore";
 import { useAdminStore } from "~/stores/adminStore";
 import { useYearStore } from "~/stores/yearStore";
 import { UserRole } from "~/types";
-import { uploadFileToStorage, deleteFileFromStorage } from "~/lib/s3storage.server";
+import { uploadFileToStorage, deleteFileFromStorage, getSignedFileUrl } from "~/lib/s3storage.server";
 
 // Extended interface
 interface Evidence extends EvidenceResponseDto {
+  signedUrl?: string | null;
   [key: string]: unknown;
 }
 
@@ -52,15 +53,24 @@ const ITEMS_PER_PAGE = 5;
 
 // Loader - fetch evidence and relations
 export async function loader() {
-  const [evidences, controls, assessmentControls, isoAssessments] =
+  const [evidencesData, controls, assessmentControls, isoAssessments] =
     await Promise.all([
       EvidenceService.getAllEvidence(),
       ControlService.getAllControl(),
       AssessmentControlService.getAllAssessmentControl(),
       IsoAssessmentService.getAllIsoAssessment(),
     ]);
+
+  // Generate signed URLs for each evidence item
+  const evidences: Evidence[] = await Promise.all(
+    evidencesData.map(async (ev) => ({
+      ...ev,
+      signedUrl: await getSignedFileUrl(ev.filePath, "evidence"),
+    })),
+  );
+
   return {
-    evidences: evidences as Evidence[],
+    evidences,
     controls,
     assessmentControls,
     isoAssessments,
@@ -415,8 +425,10 @@ export default function Evidence() {
                         </button>
                       )}
                       <a
-                        href={evidence.filePath}
+                        href={evidence.signedUrl || evidence.filePath}
                         download={evidence.fileName}
+                        target="_blank"
+                        rel="noreferrer"
                         className="p-2 hover:bg-blue-50 rounded-lg text-slate-400 hover:text-blue-600 transition-colors"
                         title="Download"
                       >
@@ -512,8 +524,10 @@ export default function Evidence() {
               </div>
               <div className="flex items-center gap-2">
                 <a
-                  href={previewEvidence.filePath}
+                  href={previewEvidence.signedUrl || previewEvidence.filePath}
                   download={previewEvidence.fileName}
+                  target="_blank"
+                  rel="noreferrer"
                   className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                 >
                   <Download className="w-4 h-4" />
@@ -532,13 +546,13 @@ export default function Evidence() {
             <div className="p-6 max-h-[calc(90vh-80px)] overflow-auto flex items-center justify-center bg-slate-50">
               {isImageFile(previewEvidence.fileName) ? (
                 <img
-                  src={previewEvidence.filePath}
+                  src={previewEvidence.signedUrl || previewEvidence.filePath}
                   alt={previewEvidence.fileName}
                   className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-sm"
                 />
               ) : (
                 <iframe
-                  src={previewEvidence.filePath}
+                  src={previewEvidence.signedUrl || previewEvidence.filePath}
                   title={previewEvidence.fileName}
                   className="w-full h-[70vh] rounded-lg border border-slate-200"
                 />
